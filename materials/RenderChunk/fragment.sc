@@ -131,6 +131,11 @@ void main() {
     vec2 uv1 = v_lightmapUV;
     vec4 fclr = v_fog;
     vec4 fctl = FogAndDistanceControl;
+    float Apa = 0.6;
+    vec3 ks = v_clipPosition.xyz;
+    vec3 wp = v_worldPos;
+    float lenKs = length(-ks);
+    float lenWp = length(wp);
 
     //detect
     float goa = smoothstep(0.5, 0.0, uv1.y);
@@ -150,6 +155,9 @@ void main() {
 #else
     bool udw = (fctl.x < 0.01) && !akhir;
 #endif
+    float isnether = step(fclr.b, fclr.r) * step(fclr.r, 0.4999) * step(fclr.b, 0.1999);
+    float isudw = step(fctl.x, 0.00999) * (akhir ? 0.0 : 1.0);
+    float isakhir = akhir ? 1.0 : 0.0;
 
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
@@ -170,6 +178,15 @@ void main() {
             _finalColor.rgb *= 1.1;
         }
     }
+
+    //shadow
+    float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
+    float shadow = shadowRaw;
+    float nolight = (1.0 - uv1.x);
+    shadow *= nolight;
+    shadow *= (1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd);
+    shadow = mix(0.0, 0.65, shadow);
+    _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), shadow);
 
 #elif defined(ALPHA_TEST)
     float dirAlpha = (max(min(N.r - N.b, 1.0), 0.0) + max(min(N.b - N.r, 1.0), 0.0));
@@ -194,6 +211,13 @@ void main() {
         _finalColor.rgb = mix(_finalColor.rgb, _finalColor.rgb * 0.55, dirAlpha * (1.0 - v_lightmapUV.x));
     }
 
+    //shadow (variabel pendukung; belum dipakai untuk mewarnai)
+    float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
+    float shadow = shadowRaw;
+    shadow *= (1.0 - uv1.x);
+    shadow *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
+    shadow = mix(0.0, 0.65, shadow);
+
 #elif defined(TRANSPARENT)
     bool banyu = (kolor.b > kolor.g || kolor.b > kolor.r);
 
@@ -207,7 +231,28 @@ void main() {
             }
             _finalColor.xyz = Tm(_finalColor.xyz);
         }
+
+        //shadow (variabel pendukung; bagian shadow di air menyusul bersama air)
+        float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
+        float shadow = shadowRaw;
+        shadow *= (1.0 - uv1.x);
+        shadow *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
+        shadow = mix(0.0, 0.65, shadow);
     }
+#endif
+
+    //fog
+#if defined(OPAQUE)
+    if (!(akhir)) {
+        vec4 fgst = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(lenKs / 100.0)), (1.0 - hujand));
+        _finalColor = fgst;
+        _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
+    }
+#elif defined(ALPHA_TEST)
+    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
+    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / 20.0)), hujand);
+#elif defined(TRANSPARENT)
+    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
 #endif
 
     diffuse = _finalColor;
