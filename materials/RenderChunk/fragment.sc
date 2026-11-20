@@ -16,6 +16,28 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #endif
 
 
+// kode tambahan aktif di semua pass kecuali SEASONS, kecuali AlphaTest (daun SEASONS ikut diwarnai)
+#if !defined(SEASONS) || defined(ALPHA_TEST)
+    #define KODE_EXTRA 1
+#endif
+
+// ===== warna terrain dimensi End =====
+#define END_BRIGHT     4.0
+#define END_SAT        0.7
+#define END_LM_TINT    0.35
+#define END_SHOULDER   0.7
+#define END_BLOCKLIGHT 0.55
+#define END_LIGHT_COL  vec3(1.1, 0.9, 1.55)
+#define END_LIGHT_AMT  0.85
+#define END_DIM        0.55
+
+// ===== bayangan awan (lantai dan sisi block) =====
+#define BAYANG_AWAN 1
+#define AWAN_SPEED 0.04
+#define BAYANG_AWAN_TINGGI 40.0
+#define BAYANG_AWAN_KUAT 0.38
+#define BAYANG_AWAN_DITHER 0.02
+
 // ===== ACESFilm tonemap =====
 vec3 ACESFilm(vec3 x) {
     float a = 3.0;
@@ -53,7 +75,7 @@ bool endFog(vec4 f) {
     return (f.r > f.g && f.b > f.g && f.r < 0.05 && f.b < 0.05 && f.g < 0.05);
 }
 
-#if !defined(SEASONS)
+#if defined(KODE_EXTRA)
 // ===== hash, fresnel, genangan (dipakai blok hujan) =====
 float hash12(vec2 q) {
     vec3 p3 = fract(vec3(q.xyx) * 0.13);
@@ -94,7 +116,63 @@ float noiseWave(vec2 x) {
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
-#endif // !SEASONS
+
+#if defined(ALPHA_TEST)
+// ===== bayangan awan (rumus sama dengan shader langit) =====
+float hashAwan(vec2 q) {
+    return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float awanBayang(vec2 awBase) {
+    float awDh = hashAwan(awBase * 999.0);
+    return step(0.88, hashAwan(floor(awBase * 1.33 + awDh * BAYANG_AWAN_DITHER + ViewPositionAndTime.w * AWAN_SPEED)));
+}
+
+// ===== caustic (voronoi) =====
+// versi GLSL asli memakai "v.xyw *= mat3(...)"; ditulis manual supaya aman di semua platform
+vec3 vmatCaustic(vec3 v) {
+    return vec3(-v.y + 2.0 * v.z, 3.0 * v.x - 2.0 * v.y + v.z, v.x + 2.0 * v.y + 2.0 * v.z);
+}
+
+float vorolit(vec2 uv) {
+    float tm = ViewPositionAndTime.w;
+    uv -= tm * 0.02;
+    uv *= 3.0;
+    vec3 q = vec3(uv * (sin(tm * 0.2) + 1.5) * 0.5, tm * 0.3);
+    q = vmatCaustic(q) * 0.5;
+    float l5 = length(vec3_splat(0.5) - fract(q));
+    q = vmatCaustic(q) * 0.4;
+    float l4 = length(vec3_splat(0.5) - fract(q));
+    q = vmatCaustic(q) * 0.3;
+    float l3 = length(vec3_splat(0.5) - fract(q));
+    return pow(min(min(l5, l4), l3), 3.0) * 4.0;
+}
+
+// arah sinar matahari bawah air
+#define RAY_D  vec3(0.324617, -0.927478, 0.185496)
+#define RAY_T1 vec3(-0.943858, -0.330350, 0.0)
+#define RAY_T2 vec3(0.061279, -0.175082, -0.982645)
+
+float causticRay(vec3 pp, vec3 nn) {
+    vec2 q = vec2(dot(pp, RAY_T1), dot(pp, RAY_T2));
+    float c = smoothstep(0.2, 1.0, vorolit(q * 0.35));
+    c *= mix(0.6, 1.0, saturate(dot(nn, -RAY_D)));
+    return c;
+}
+
+float godRayFog(vec3 pp, vec3 ww) {
+    float jit = fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)) * 52.9829189);
+    float acc = 0.0;
+    for (int i = 0; i < 4; i++) {
+        float t = (float(i) + jit) * 0.25;
+        vec3 sp = pp - ww * (1.0 - t);
+        vec2 q = vec2(dot(sp, RAY_T1), dot(sp, RAY_T2));
+        acc += smoothstep(0.45, 0.8, noiseWave(q * 0.9));
+    }
+    return acc * 0.25;
+}
+#endif // ALPHA_TEST
+#endif // KODE_EXTRA
 
 void main() {
 #if defined(DEPTH_ONLY) || defined(DEPTH_ONLY_OPAQUE) || defined(DEPTH_ONLY_ALPHA_TEST)
@@ -161,15 +239,37 @@ void main() {
     }
 #endif
 
+#if defined(ALPHA_TEST)
+    // lightmap AlphaTest: di dimensi End cahaya block diredam dan diberi warna ungu
+    bool _akhirE = endFog(v_fog);
+    vec2 _lmUV = v_lightmapUV;
+    if (_akhirE) {
+        _lmUV.x *= END_BLOCKLIGHT;
+    }
+    vec3 _lm = texture2D(s_LightMapTexture, _lmUV).rgb;
+    if (_akhirE) {
+        float _lmL = dot(_lm, vec3(0.2125, 0.7154, 0.0721));
+        _lm = mix(vec3_splat(_lmL), _lm, END_LM_TINT);
+        _lm = mix(_lm, _lmL * END_LIGHT_COL, saturate(v_lightmapUV.x) * END_LIGHT_AMT);
+    }
+    diffuse.rgb *= _lm;
+#else
     diffuse.rgb *= texture2D(s_LightMapTexture, v_lightmapUV).rgb;
+#endif
     diffuse.rgb = mix(diffuse.rgb, FogColor.rgb, v_fog.a);
 
-#if !defined(SEASONS)
+#if defined(KODE_EXTRA)
     vec4 _finalColor = diffuse;
 
     //var
+#if defined(SEASONS)
+    // di SEASONS v_color0 berisi data musim (bukan warna vertex); AlphaTest SEASONS = daun (hijau)
+    vec4 color = vec4(0.0, 1.0, 0.0, 1.0);
+    vec4 kolor = color;
+#else
     vec4 color = v_color0;
     vec4 kolor = v_color0;
+#endif
     vec3 N = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
     vec2 uv1 = v_lightmapUV;
     vec4 fclr = v_fog;
@@ -282,12 +382,68 @@ void main() {
         _finalColor.rgb = mix(_finalColor.rgb, _finalColor.rgb * 0.55, dirAlpha * (1.0 - v_lightmapUV.x));
     }
 
-    //shadow (variabel pendukung; belum dipakai untuk mewarnai)
+    //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
     float shadow = shadowRaw;
     shadow *= (1.0 - uv1.x);
     shadow *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
     shadow = mix(0.0, 0.65, shadow);
+    float endK = (fctl.x < 0.01) ? END_DIM : 1.0;
+
+    //bayangan awan (lantai dan sisi block, bagian bawah tidak)
+#if BAYANG_AWAN
+    if (N.y > -0.5) {
+        // hilang: malam, hujan, bawah air/nether/end, dan di bawah shadow block
+        float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
+        if (bAktif > 0.001) {
+            float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
+            float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI) * smoothstep(0.0, 0.12, bDy);
+            _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
+        }
+    }
+#endif
+
+    //end
+    if (akhir) {
+        vec3 ec = _finalColor.rgb * END_BRIGHT * endK;
+        ec = saturation(ec, END_SAT);
+        vec3 eo = max(ec - vec3_splat(END_SHOULDER), vec3_splat(0.0));
+        float ek = 1.0 - END_SHOULDER;
+        ec = min(ec, vec3_splat(END_SHOULDER)) + ek * (vec3_splat(1.0) - exp(-eo / ek));
+        _finalColor.rgb = ec;
+
+        float drl = max(-N.x, -N.z);
+        _finalColor.xyz *= mix(vec3_splat(0.85), vec3_splat(0.65), drl * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)));
+    }
+
+    //underwater
+    if (udw) {
+        _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
+        _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
+
+        //caustic
+        float skyMax = 0.9375;
+        float topBand = smoothstep(skyMax - 0.01, skyMax - 0.001, uv1.y);
+        float belowEye = 1.0 - smoothstep(0.7, 1.2, wp.y);
+        float inWater = mix(1.0, belowEye, topBand);
+        float lit = smoothstep(skyMax - 0.24, skyMax - 0.02, uv1.y);
+        float cmask = inWater * lit * (1.0 - saturate(lenKs / 20.0));
+        if (cmask > 0.001) {
+            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
+        }
+
+        //god rays
+        if (wk > 0.05) {
+            float fog2 = smoothstep(1.0, 2.0, lenWp);
+            if (fog2 > 0.01) {
+                float dens = godRayFog(p, wp);
+                float bukanBawah = smoothstep(-0.7, -0.2, N.y);
+                float a = dens * fog2 * wk * uv1.y * 0.5 * bukanBawah;
+                _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(a));
+            }
+        }
+    }
 
 #elif defined(TRANSPARENT)
     bool banyu = (kolor.b > kolor.g || kolor.b > kolor.r);
@@ -345,6 +501,17 @@ void main() {
 
         //fresnel air
         _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
+
+        //underwater (permukaan air dilihat dari bawah)
+        float uw = float(fctl.x == 0.0 && fctl.y < 0.8 && (FogColor.z > FogColor.x || FogColor.y > FogColor.x));
+        if (uw > 0.5 && N.y < -0.5) {
+            _finalColor.rgb = mix(_finalColor.rgb, vec3(0.1, 0.45, 0.9), 0.85);
+            _finalColor.rgb += fresnel(f0, NdotV) * 0.5 * (1.0 - malamd);
+
+            //transparansi air
+            _finalColor.a = lenWp / 15.0 + wave * 0.05;
+            _finalColor.a *= 1.5;
+        }
     }
 #endif
 
