@@ -53,6 +53,7 @@ bool endFog(vec4 f) {
     return (f.r > f.g && f.b > f.g && f.r < 0.05 && f.b < 0.05 && f.g < 0.05);
 }
 
+#if !defined(SEASONS)
 // ===== hash, fresnel, genangan (dipakai blok hujan) =====
 float hash12(vec2 q) {
     vec3 p3 = fract(vec3(q.xyx) * 0.13);
@@ -93,6 +94,7 @@ float noiseWave(vec2 x) {
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
+#endif // !SEASONS
 
 void main() {
 #if defined(DEPTH_ONLY) || defined(DEPTH_ONLY_OPAQUE) || defined(DEPTH_ONLY_ALPHA_TEST)
@@ -301,7 +303,7 @@ void main() {
             _finalColor.xyz = Tm(_finalColor.xyz);
         }
 
-        //shadow (variabel pendukung; bagian shadow di air menyusul bersama air)
+        //shadow (variabel pendukung; shadow khusus air ada di blok //air -> shadowAir)
         float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
         float shadow = shadowRaw;
         shadow *= (1.0 - uv1.x);
