@@ -160,8 +160,9 @@ float causticRay(vec3 pp, vec3 nn) {
     return c;
 }
 
-float godRayFog(vec3 pp, vec3 ww) {
-    float jit = fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)) * 52.9829189);
+// fc = gl_FragCoord.xy, dikirim dari main (di HLSL gl_FragCoord tidak terlihat di dalam fungsi lain)
+float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
+    float jit = fract(dot(fc, vec2(0.06711056, 0.00583715)) * 52.9829189);
     float acc = 0.0;
     for (int i = 0; i < 4; i++) {
         float t = (float(i) + jit) * 0.25;
@@ -437,7 +438,7 @@ void main() {
         if (wk > 0.05) {
             float fog2 = smoothstep(1.0, 2.0, lenWp);
             if (fog2 > 0.01) {
-                float dens = godRayFog(p, wp);
+                float dens = godRayFog(p, wp, gl_FragCoord.xy);
                 float bukanBawah = smoothstep(-0.7, -0.2, N.y);
                 float a = dens * fog2 * wk * uv1.y * 0.5 * bukanBawah;
                 _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(a));
