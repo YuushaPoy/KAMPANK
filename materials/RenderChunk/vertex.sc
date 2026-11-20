@@ -14,6 +14,9 @@ uniform vec4 ViewPositionAndTime;
 uniform vec4 FogColor;
 uniform vec4 MeshContext;
 
+// intensitas fog bawaan AlphaTest dikali ini (fog tambahan ada di fragment, blok //fog)
+#define FOG_AMOUNT 0.3
+
 void main() {
 #ifdef INSTANCING
     mat4 model = mtxFromCols(i_data1, i_data2, i_data3, vec4(0.0, 0.0, 0.0, 1.0));
@@ -56,6 +59,14 @@ void main() {
 
     float camDist = length(ViewPositionAndTime.xyz - worldPos);
     float fogIntensity = clamp((((camDist / fogAndDist.z) + RenderChunkFogAlpha.x) - fogAndDist.x) / (fogAndDist.y - fogAndDist.x), 0.0, 1.0);
+#if !defined(SEASONS)
+  #if defined(OPAQUE)
+    fogIntensity = 0.0;
+  #elif defined(ALPHA_TEST)
+    fogIntensity *= FOG_AMOUNT;
+  #endif
+#endif
+
     vec4 fog = vec4(FogColor.rgb, fogIntensity);
 
 #if defined(TRANSPARENT)
