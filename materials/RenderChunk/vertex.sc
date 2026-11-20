@@ -3,7 +3,7 @@ $input a_color0, a_position, a_texcoord0, a_texcoord1
     $input i_data1, i_data2, i_data3
 #endif
 
-$output v_clipPosition, v_color0, v_ditheringAndMaskTinting, v_fog, v_lightmapUV, v_texcoord0, v_worldPos, v_worldPosition
+$output v_clipPosition, v_color0, v_ditheringAndMaskTinting, v_fog, v_lightmapUV, v_texcoord0, v_worldPos, v_worldPosition, p
 
 #include <bgfx_shader.sh>
 #include <MinecraftRenderer.Materials/TAAUtil.dragonh>
@@ -72,5 +72,6 @@ void main() {
     v_lightmapUV = lightmapUV;
     v_texcoord0 = uv0;
     v_worldPos = worldPos;
+    p = a_position;
     gl_Position = position;
 }
