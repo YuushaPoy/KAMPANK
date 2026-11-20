@@ -53,6 +53,29 @@ bool endFog(vec4 f) {
     return (f.r > f.g && f.b > f.g && f.r < 0.05 && f.b < 0.05 && f.g < 0.05);
 }
 
+// ===== hash, fresnel, genangan (dipakai blok hujan) =====
+float hash12(vec2 q) {
+    vec3 p3 = fract(vec3(q.xyx) * 0.13);
+    p3 += dot(p3, p3.yzx + 3.333);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 fresnel(vec3 f0, float NdotV) {
+    return f0 + (1.0 - f0) * pow(1.0 - NdotV, 5.0);
+}
+
+// bentuk genangan: kotak membulat acak per sel 4x4 blok (hanya ~30% sel yang berisi genangan)
+float genangan(vec2 q) {
+    vec2 g = q / 4.0;
+    vec2 id = floor(g);
+    vec2 f = fract(g) - 0.5;
+    vec2 c = (vec2(hash12(id + 7.3), hash12(id + 13.1)) - 0.5) * 0.2;
+    vec2 hs = 0.15 + 0.17 * vec2(hash12(id + 3.7), hash12(id + 9.9));
+    vec2 d = abs(f - c) - (hs - 0.1);
+    float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - 0.1;
+    return step(0.7, hash12(id)) * (1.0 - smoothstep(-0.04, 0.04, sd));
+}
+
 void main() {
 #if defined(DEPTH_ONLY) || defined(DEPTH_ONLY_OPAQUE) || defined(DEPTH_ONLY_ALPHA_TEST)
     #if defined(ALPHA_TEST)
@@ -136,6 +159,8 @@ void main() {
     vec3 wp = v_worldPos;
     float lenKs = length(-ks);
     float lenWp = length(wp);
+    vec3 V = normalize(-wp);
+    float NdotV = max(0.001, dot(N, V));
 
     //detect
     float goa = smoothstep(0.5, 0.0, uv1.y);
@@ -187,6 +212,32 @@ void main() {
     shadow *= (1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd);
     shadow = mix(0.0, 0.65, shadow);
     _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), shadow);
+
+    //hujan
+    if (!(udw && nether && akhir)) {
+        _finalColor.rgb += vec3(-0.2, -0.1, -0.05) * dudan * (1.0 - malamd);
+
+        //genangan (hanya permukaan atas yang terbuka ke langit)
+        if (hujand > 0.0) {
+            float langitTerbuka = smoothstep(0.88, 0.94, uv1.y);
+            float gn = genangan(p.xz) * langitTerbuka * hujand * step(0.5, N.y);
+            vec3 gnBasah = mix(_finalColor.rgb, vec3_splat(dot(_finalColor.rgb, vec3_splat(0.333))), 0.4) * 0.7;
+            vec3 gnKilap = mix(gnBasah, FogColor.rgb * 1.2 + 0.1, fresnel(vec3_splat(0.15), NdotV));
+            _finalColor.rgb = mix(_finalColor.rgb, gnKilap, gn);
+        }
+    }
+
+    //light
+    if (!(akhir)) {
+        float jitB = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        float Lb = uv1.x + (jitB - 0.5) * 0.0625;
+        float core = smoothstep(0.72, 0.94, Lb);
+        core *= core;
+        float night = 1.0 - siangd * 0.8;
+        float flick = 0.9 + 0.1 * sin(ViewPositionAndTime.w * 3.0 + p.x * 0.7 + p.z * 0.7);
+        float glow = core * night * flick * (1.0 - saturate(lenWp / 80.0));
+        _finalColor.rgb += vec3(1.0, 0.55, 0.2) * glow * 0.6 * (1.0 - saturate(_finalColor.rgb));
+    }
 
 #elif defined(ALPHA_TEST)
     float dirAlpha = (max(min(N.r - N.b, 1.0), 0.0) + max(min(N.b - N.r, 1.0), 0.0));
