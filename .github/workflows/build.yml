@@ -1,0 +1,39 @@
+name: Build Multiplatform Shaders
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+
+      - name: Build Shaders (Multiplatform)
+        shell: cmd
+        run: |
+          call build.bat EndSky multiplatform
+          call build.bat RenderChunk multiplatform
+          call build.bat Sky multiplatform
+          call build.bat Actor multiplatform
+
+      - name: Upload Compiled Shaders
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multiplatform-Shaders-Build
+          path: build/
+          
