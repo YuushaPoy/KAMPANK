@@ -76,6 +76,24 @@ float genangan(vec2 q) {
     return step(0.7, hash12(id)) * (1.0 - smoothstep(-0.04, 0.04, sd));
 }
 
+// ===== air: saturasi sederhana dan noise ombak =====
+vec3 satuR(vec3 v, float val) {
+    vec3 sat = vec3_splat(dot(v, vec3_splat(1.0 / 3.0)));
+    return mix(sat, v, val);
+}
+
+float noiseWave(vec2 x) {
+    x.y -= ViewPositionAndTime.w * 0.02;
+    vec2 i = floor(x);
+    vec2 f = fract(x);
+    float a = hash12(i);
+    float b = hash12(i + vec2(1.0, 0.0));
+    float c = hash12(i + vec2(0.0, 1.0));
+    float d = hash12(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
 void main() {
 #if defined(DEPTH_ONLY) || defined(DEPTH_ONLY_OPAQUE) || defined(DEPTH_ONLY_ALPHA_TEST)
     #if defined(ALPHA_TEST)
@@ -289,6 +307,42 @@ void main() {
         shadow *= (1.0 - uv1.x);
         shadow *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
         shadow = mix(0.0, 0.65, shadow);
+    }
+
+    //air
+    if (banyu) {
+        vec3 f0 = vec3_splat(0.05);
+        vec3 pot = p * 0.2;
+        float tm = ViewPositionAndTime.w;
+
+        //gambar ombak (dari noise)
+        float wave = sin(noiseWave(vec2(tm * 0.7 + pot.x + pot.x + pot.z * 3.0, tm * 1.2 + pot.z + pot.x + pot.z * 1.0 + pot.x * 2.0)));
+
+        //warna air
+        _finalColor = vec4(0.3, 0.5, 1.0, 1.0) * 0.7 * siangd * (1.0 - hujand);
+        _finalColor += vec4(0.3, 0.5, 0.7, 1.2) * 0.5 * malamd * (1.0 - hujand);
+        _finalColor.rgb += vec3_splat(0.5) * 0.3 * hujand;
+        _finalColor.rgb += vec3(0.1, 0.5, 1.0) * sored * (1.0 - hujand);
+        _finalColor.rgb = satuR(_finalColor.rgb, 1.2) * siangd * (1.0 - goa);
+        _finalColor.rgb += vec3(0.3, 0.5, 0.7) * goa;
+
+        //transparansi air
+        _finalColor.a = lenWp / 15.0;
+        _finalColor.a *= 1.5;
+
+        //wave air
+        _finalColor.rgb += wave * 0.1 * vec3(0.3, 0.5, 1.0) * 0.7 * malamd;
+        _finalColor.rgb += wave * 0.1 * vec3_splat(1.0) * 0.3 * hujand;
+
+        //shadow block di air
+        float shadowAir = smoothstep(1.0, 0.95, uv1.y + wave * 0.05);
+        shadowAir *= (1.0 - uv1.x);
+        shadowAir *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
+        shadowAir = mix(0.0, 0.65, shadowAir);
+        _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.08), shadowAir * (0.6 + wave * 0.4));
+
+        //fresnel air
+        _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
     }
 #endif
 
