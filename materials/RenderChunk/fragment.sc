@@ -70,6 +70,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define AWAN_SZ 1.0
 #define AWAN_METAL_KUAT 1.0   // kekuatan awan di pantulan logam (metalic)
 #define AWAN_SPEED_DINDING 0.04 // kecepatan awan di pantulan dinding logam
+#define AWAN_DINDING_JARAK 3.0  // jarak kamera ke dinding yang dianggap tetap untuk pantulan awan (ukuran awan tidak berubah saat kamera menjauh)
 #define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
 #define AWAN_AIR_TINGGI 10.0  // tinggi awan tetap untuk pantulan: makin KECIL = awan makin kecil (ukuran sel ~ tinggi / 1.4 blok)
 
@@ -205,10 +206,8 @@ float hashAwan(vec2 q) {
 
 #if defined(ALPHA_TEST) || defined(OPAQUE)
 // ===== refleksi awan di logam (lantai dan dinding) =====
-// awH = vektor kamera -> piksel setelah dipantulkan (xz), spd = kecepatan awan
-// posisi awan dari jarak horizontal / tinggi awan TETAP, jadi ukuran awan tidak berubah saat ketinggian kamera berubah
-float awanRefMetal(vec2 awH, float spd) {
-    vec2 awBase = vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI;
+// inti: 12 lapis awan dari koordinat awBase
+float awanLapis(vec2 awBase, float spd) {
     float awDh = hashAwan(awBase * 999.0);
     float awShd = 0.0;
     float awMm = 1.0;
@@ -220,6 +219,18 @@ float awanRefMetal(vec2 awH, float spd) {
         awShd = mix(awShd, awMm, awAwan);
     }
     return awShd;
+}
+
+// lantai: posisi awan dari jarak horizontal pantulan / tinggi awan TETAP,
+// jadi ukuran awan tidak berubah saat ketinggian kamera berubah. awH = pantulan xz (vektor kamera -> piksel)
+float awanRefMetal(vec2 awH, float spd) {
+    return awanLapis(vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI, spd);
+}
+
+// dinding: rumus awanRef dari RenderChunk (arah pantul awR satuan -> awR.xz / awR.y)
+float awanRef(vec3 awR, float spd) {
+    vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
+    return awanLapis(awBase, spd) * smoothstep(0.0, 0.12, awR.y);
 }
 
 // ===== bayangan awan (rumus sama dengan shader langit) =====
@@ -502,10 +513,17 @@ void main() {
 
         //awan ref (dinding, hanya di atas tinggi mata)
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
-            vec3 awRv = reflect(wp, N);
-            if (awRv.y > 0.0) {
-                float awUp = awRv.y / max(lenWp, 0.001); // arah pantul ke atas: awan hilang mendekati tinggi mata
-                float awMask = awanRefMetal(awRv.xz, AWAN_SPEED_DINDING) * smoothstep(0.0, 0.12, awUp) * AWAN_METAL_KUAT;
+            // jarak kamera ke dinding diganti konstan: ukuran awan tidak berubah saat kamera menjauh,
+            // pola tetap bervariasi di seluruh permukaan dinding (bukan garis mendatar)
+            vec3 awI = wp;
+            if (abs(N.x) > 0.5) {
+                awI.x = (wp.x >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
+            } else {
+                awI.z = (wp.z >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
+            }
+            vec3 awR = normalize(reflect(awI, N));
+            if (awR.y > 0.0) {
+                float awMask = awanRef(awR, AWAN_SPEED_DINDING) * AWAN_METAL_KUAT;
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
             }
@@ -679,10 +697,17 @@ void main() {
 
         //awan ref (dinding, hanya di atas tinggi mata)
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
-            vec3 awRv = reflect(wp, N);
-            if (awRv.y > 0.0) {
-                float awUp = awRv.y / max(lenWp, 0.001);
-                float awMask = awanRefMetal(awRv.xz, AWAN_SPEED_DINDING) * smoothstep(0.0, 0.12, awUp) * AWAN_METAL_KUAT;
+            // jarak kamera ke dinding diganti konstan: ukuran awan tidak berubah saat kamera menjauh,
+            // pola tetap bervariasi di seluruh permukaan dinding (bukan garis mendatar)
+            vec3 awI = wp;
+            if (abs(N.x) > 0.5) {
+                awI.x = (wp.x >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
+            } else {
+                awI.z = (wp.z >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
+            }
+            vec3 awR = normalize(reflect(awI, N));
+            if (awR.y > 0.0) {
+                float awMask = awanRef(awR, AWAN_SPEED_DINDING) * AWAN_METAL_KUAT;
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
             }
