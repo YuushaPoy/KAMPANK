@@ -51,9 +51,6 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define GODRAY_DEKAT 5.0        // jarak (blok) sampai berkas penuh dari dekat kamera
 #define GODRAY_JAUH_MIN 24.0    // mulai memudar di kejauhan
 #define GODRAY_JAUH_MAX 48.0    // hilang total di kejauhan
-#define GODRAY_LAUT 63.0        // ketinggian permukaan laut
-#define GODRAY_DALAM_MIN 12.0   // kedalaman kamera (dari permukaan laut) mulai memudar
-#define GODRAY_DALAM_MAX 28.0   // laut dalam: berkas hilang total
 #define GODRAY_GESER 0.10       // kecepatan berkas bergeser
 #define GODRAY_KEDIP 0.30       // kedalaman kedipan (0.0 = tidak berkedip)
 
@@ -667,11 +664,8 @@ void main() {
     if (udw && wk > 0.05) {
         // hilang di kejauhan (dan tidak muncul tepat di depan kamera)
         float grJarak = smoothstep(1.0, GODRAY_DEKAT, lenWp) * (1.0 - smoothstep(GODRAY_JAUH_MIN, GODRAY_JAUH_MAX, lenWp));
-        // hilang di laut dalam (kedalaman kamera dari permukaan laut)
-        float grDalam = 1.0 - smoothstep(GODRAY_DALAM_MIN, GODRAY_DALAM_MAX, GODRAY_LAUT - ViewPositionAndTime.y);
-        // tidak ada di bawah block (cahaya langit di permukaan itu rendah)
-        float grAtap = smoothstep(0.45, 0.80, uv1.y);
-        float grGate = grJarak * grDalam * grAtap;
+        // laut dalam (1.0 - uv1.y) dan di bawah block: berkas dikalikan uv1.y (= v_lightmapUV.y)
+        float grGate = grJarak * uv1.y;
         if (grGate > 0.001) {
             float grDens = godRayFog(ViewPositionAndTime.xyz, wp, gl_FragCoord.xy);
             float grBawah = smoothstep(-0.7, -0.2, N.y);
