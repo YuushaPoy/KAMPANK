@@ -69,7 +69,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define AWAN_SX 1.0
 #define AWAN_SZ 1.0
 #define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
-#define AWAN_AIR_TINGGI 40.0  // tinggi awan tetap untuk pantulan (sama dengan bayangan awan): makin besar = awan makin besar
+#define AWAN_AIR_TINGGI 10.0  // tinggi awan tetap untuk pantulan: makin KECIL = awan makin kecil (ukuran sel ~ tinggi / 1.4 blok)
 
 // ===== god rays bawah air =====
 #define GODRAY_POWER 0.8        // kekuatan berkas cahaya (0.0 = mati)
