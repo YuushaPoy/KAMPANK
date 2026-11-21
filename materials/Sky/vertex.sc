@@ -3,12 +3,13 @@ $input a_color0, a_position, a_texcoord0
     $input i_data1, i_data2, i_data3
 #endif
 
-$output v_color0, v_texcoord0, v_worldPos, fclr, p
+$output v_color0, v_texcoord0, v_worldPos, fclr, p, waktu
 
 #include <bgfx_shader.sh>
 
 uniform vec4 SkyColor;
 uniform vec4 FogColor;
+uniform vec4 ViewPositionAndTime;
 
 void main() {
     vec3 worldPosition;
@@ -27,5 +28,6 @@ void main() {
     v_worldPos = worldPosition;
     fclr = FogColor;
     p = a_position;
+    waktu = ViewPositionAndTime.w;
     gl_Position = mul(u_viewProj, vec4(worldPosition, 1.0));
 }
