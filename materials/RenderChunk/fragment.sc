@@ -6,10 +6,7 @@ $input v_clipPosition, v_worldPosition, v_color0, v_ditheringAndMaskTinting, v_f
 uniform vec4 FogColor;
 uniform vec4 FogAndDistanceControl;
 
-// ===== fog bawah air (tebal, menutup dasar laut) =====
-// UDW_FOG_MAX   : pekat maksimum di kejauhan (1.0 = menutup penuh)
-// UDW_FOG_START : jarak mulai terasa
-// UDW_FOG_END   : jarak yang sudah mencapai pekat maksimum
+//fog bawah air
 #define UDW_FOG_MAX   1.0
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
@@ -26,13 +23,11 @@ SAMPLER2D_AUTOREG(s_LightMapTexture);
 SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #endif
 
-
-// kode tambahan aktif di semua pass kecuali SEASONS, kecuali AlphaTest (daun SEASONS ikut diwarnai)
 #if !defined(SEASONS) || defined(ALPHA_TEST)
     #define KODE_EXTRA 1
 #endif
 
-// ===== warna terrain dimensi End =====
+//warna terrain dimensi End
 #define END_BRIGHT     4.0
 #define END_SAT        0.7
 #define END_LM_TINT    0.35
@@ -42,48 +37,47 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define END_LIGHT_AMT  0.85
 #define END_DIM        0.55
 
-// ===== metalic (alpha texture 250): memantulkan warna langit dan awan =====
-#define SISI_HALUS 0.15   // kehalusan peralihan warna atas/bawah di dinding sekitar tinggi mata
+//metalic
+#define SISI_HALUS 0.15
 
-// ===== gradasi biru air saat malam =====
-#define AIR_GRAD_MULAI 20.0   // jarak (blok) mulai bergradasi ke biru
-#define AIR_GRAD_PENUH 100.0  // jarak (blok) biru penuh (makin besar = biru makin jauh)
+//gradasi biru air saat malam
+#define AIR_GRAD_MULAI 20.0
+#define AIR_GRAD_PENUH 100.0
 
-// ===== glow (dibaca dari alpha texture: 252 = glow penuh, 253 = glow redup) =====
-#define GLOW_INTENSITY 0.85       // kekuatan glow (0.0 = mati)
-#define GLOW_SIANG 0.35           // glow siang hari sebagai fraksi dari glow di tempat gelap
-#define GLOW_DENYUT 0.08          // denyut halus (0.0 = tidak berdenyut)
-#define GLOW_LANGIT_MIN 0.55      // cahaya langit (lightmap.y): glow penuh di bawah MIN, hilang di atas MAX
+//glow
+#define GLOW_INTENSITY 0.85
+#define GLOW_SIANG 0.35
+#define GLOW_DENYUT 0.08
+#define GLOW_LANGIT_MIN 0.55
 #define GLOW_LANGIT_MAX 0.90
-#define GLOW_MALAM_TERBUKA 1.0    // 1.0 = malam hari glow tetap menyala di langit terbuka (0.0 = perilaku lama)
+#define GLOW_MALAM_TERBUKA 1.0
 
-// ===== bayangan awan (lantai dan sisi block) =====
+//bayangan awan
 #define BAYANG_AWAN 1
 #define AWAN_SPEED 0.04
 #define BAYANG_AWAN_TINGGI 40.0
 #define BAYANG_AWAN_KUAT 0.38
 #define BAYANG_AWAN_DITHER 0.02
 
-// ===== refleksi awan di air: harus SAMA dengan shader langit =====
-// kalau pola awan terbalik, coba AWAN_SX = -1.0 dan/atau AWAN_SZ = -1.0
+//refleksi awan di air
 #define AWAN_SX 1.0
 #define AWAN_SZ 1.0
-#define AWAN_METAL_KUAT 1.0   // kekuatan awan di pantulan logam (metalic)
-#define AWAN_SPEED_DINDING 0.04 // kecepatan awan di pantulan dinding logam
-#define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
-#define AWAN_AIR_TINGGI 10.0  // tinggi awan tetap untuk pantulan: makin KECIL = awan makin kecil (ukuran sel ~ tinggi / 1.4 blok)
+#define AWAN_METAL_KUAT 1.0
+#define AWAN_SPEED_DINDING 0.04
+#define AWAN_AIR_KUAT 0.3
+#define AWAN_AIR_TINGGI 10.0
 
-// ===== god rays bawah air =====
-#define GODRAY_POWER 0.8        // kekuatan berkas cahaya (0.0 = mati)
-#define GODRAY_DEKAT 5.0        // jarak (blok) sampai berkas penuh dari dekat kamera
-#define GODRAY_JAUH_MIN 24.0    // mulai memudar di kejauhan
-#define GODRAY_JAUH_MAX 48.0    // hilang total di kejauhan
-#define GODRAY_GESER 0.10       // kecepatan berkas bergeser
-#define GODRAY_PERIODE 8.0      // pola berulang tiap 8 blok (membagi 16, jadi menyambung mulus di batas chunk)
-#define GODRAY_MIRING 0.5       // kemiringan berkas; 16 x 0.5 = 8 = 1 periode, jadi menyambung juga antar chunk vertikal
-#define GODRAY_KEDIP 0.30       // kedalaman kedipan (0.0 = tidak berkedip)
+//god rays bawah air
+#define GODRAY_POWER 0.8
+#define GODRAY_DEKAT 5.0
+#define GODRAY_JAUH_MIN 24.0
+#define GODRAY_JAUH_MAX 48.0
+#define GODRAY_GESER 0.10
+#define GODRAY_PERIODE 8.0
+#define GODRAY_MIRING 0.5
+#define GODRAY_KEDIP 0.30
 
-// ===== ACESFilm tonemap =====
+//ACESFilm tonemap
 vec3 ACESFilm(vec3 x) {
     float a = 3.0;
     float b = 0.001;
@@ -92,9 +86,8 @@ vec3 ACESFilm(vec3 x) {
     float e = 0.1;
     return ((x * (a * x + b)) / (x * (c * x + d) + e));
 }
-// ========================
 
-// ===== Tm tonemap (AlphaTest a = 3.0, Opaque dan Transparent a = 4.1) =====
+//Tm tonemap
 vec3 Tm(vec3 x) {
 #if defined(ALPHA_TEST)
     float a = 3.0;
@@ -109,19 +102,16 @@ vec3 Tm(vec3 x) {
     return hasil;
 }
 
-// ===== saturation =====
+//saturation
 vec3 saturation(vec3 rgb, float adjustment) {
     vec3 W = vec3(0.2125, 0.7154, 0.0721);
     vec3 intensity = vec3_splat(dot(rgb, W));
     return mix(intensity, rgb, adjustment);
 }
 
-// tingkat "ini dimensi End" 0..1 dari warna fog (halus, bukan ya/tidak).
-// Warna fog End berubah sedikit saat ender dragon ada / tidak ada; dulu ambang keras (< 0.05)
-// membuat warna terrain melompat. Sekarang tepinya dilembutkan supaya peralihan mulus.
 float endFogAmt(vec4 f) {
-    float ungu = smoothstep(0.0, 0.012, min(f.r, f.b) - f.g);       // merah dan biru di atas hijau
-    float gelap = 1.0 - smoothstep(0.05, 0.14, max(f.r, max(f.g, f.b))); // fog tetap gelap
+    float ungu = smoothstep(0.0, 0.012, min(f.r, f.b) - f.g);
+    float gelap = 1.0 - smoothstep(0.05, 0.14, max(f.r, max(f.g, f.b)));
     return ungu * gelap;
 }
 bool endFog(vec4 f) {
@@ -129,15 +119,14 @@ bool endFog(vec4 f) {
 }
 
 #if defined(KODE_EXTRA)
-// ===== hash, fresnel, genangan (dipakai blok hujan) =====
+//hash, fresnel, genangan
 float hash12(vec2 q) {
     vec3 p3 = fract(vec3(q.xyx) * 0.13);
     p3 += dot(p3, p3.yzx + 3.333);
     return fract((p3.x + p3.y) * p3.z);
 }
 
-// ===== dither Bayer 8x8 (ordered dither), hasil 0..1 =====
-// fc = gl_FragCoord.xy (dikirim dari main karena di HLSL gl_FragCoord tidak terlihat di dalam fungsi lain)
+//dither Bayer 8x8
 float bayer2(vec2 a) {
     a = floor(a);
     return fract(a.x * 0.5 + a.y * a.y * 0.75);
@@ -155,7 +144,6 @@ vec3 fresnel(vec3 f0, float NdotV) {
     return f0 + (1.0 - f0) * pow(1.0 - NdotV, 5.0);
 }
 
-// bentuk genangan: kotak membulat acak per sel 4x4 blok (hanya ~30% sel yang berisi genangan)
 float genangan(vec2 q) {
     vec2 g = q / 4.0;
     vec2 id = floor(g);
@@ -167,13 +155,12 @@ float genangan(vec2 q) {
     return step(0.7, hash12(id)) * (1.0 - smoothstep(-0.04, 0.04, sd));
 }
 
-// ===== air: saturasi sederhana dan noise ombak =====
+//air
 vec3 satuR(vec3 v, float val) {
     vec3 sat = vec3_splat(dot(v, vec3_splat(1.0 / 3.0)));
     return mix(sat, v, val);
 }
 
-// noise 2D yang berulang tiap 'per' sel, supaya pola menyambung mulus di batas chunk
 float noiseTile(vec2 x, float per) {
     vec2 i = floor(x);
     vec2 f = fract(x);
@@ -188,41 +175,28 @@ float noiseTile(vec2 x, float per) {
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// ===== ombak air =====
-// Gelombang air sederhana: beberapa gelombang sinus yang merambat ke arah berbeda (garis-garis riak lembut).
-// Berjangkar pada p (posisi lokal chunk 0..16), jadi tidak ikut bergerak bersama pemain.
-// Syarat menyambung di batas chunk: jumlah gelombang per 16 blok harus BILANGAN BULAT,
-// makanya frekuensinya = OMBAK_K * bilangan bulat (OMBAK_K = 2*PI/16).
-#define OMBAK_K 0.39269908       // 2*PI/16, jangan diubah supaya tidak putus di batas chunk
-#define OMBAK_GESER 1.0          // kecepatan gelombang bergeser (0.0 = diam)
-#define OMBAK_KUAT_SIANG 0.25    // kekuatan riak di siang hari (0.0 = mati)
-// hasil 0..1
+//ombak air
+#define OMBAK_K 0.39269908
+#define OMBAK_GESER 1.0
+#define OMBAK_KUAT_SIANG 0.25
 float ombakAir(vec2 pxz, float tm) {
     float g = tm * OMBAK_GESER;
-    // gelombang utama: panjang ~7 blok, merambat diagonal
     float w1 = sin(dot(pxz, vec2(2.0, 1.0)) * OMBAK_K + g * 1.3);
-    // gelombang kedua: panjang ~5 blok, arah menyilang
     float w2 = sin(dot(pxz, vec2(-1.0, 3.0)) * OMBAK_K - g * 1.7);
-    // riak halus: panjang ~3 blok
     float w3 = sin(dot(pxz, vec2(4.0, -3.0)) * OMBAK_K + g * 2.3);
-    float h = w1 * 0.5 + w2 * 0.3 + w3 * 0.2;   // -1..1
+    float h = w1 * 0.5 + w2 * 0.3 + w3 * 0.2;
     return 0.5 + 0.5 * h;
 }
 
-// ===== glow =====
-// kode alpha texture -> kekuatan glow
+//glow
 float oreGlowCode(float a) {
     int c = int(a * 255.0 + 0.5);
     return (c == 252) ? 1.0 : ((c == 253) ? 0.4 : 0.0);
 }
 
-// faktor kecerahan glow: jarak, naungan langit, siang/malam, denyut
-// skyL = lightmap.y, wkS = kecerahan langit (wk), malamS = malamd, lenK = jarak ke kamera
 float glowFactor(float lenK, float skyL, float wkS, float malamS) {
     float fade = 1.0 - smoothstep(0.6, 1.0, lenK / FogAndDistanceControl.z);
-    // aturan lama: makin terbuka ke langit, glow makin hilang
     float naungan = 1.0 - smoothstep(GLOW_LANGIT_MIN, GLOW_LANGIT_MAX, skyL);
-    // aturan baru: saat malam, langit terbuka tidak lagi meredam glow
     float malamTerbuka = (1.0 - smoothstep(0.1, 0.4, wkS)) * GLOW_MALAM_TERBUKA;
     naungan = max(naungan, malamTerbuka);
     float terang = mix(GLOW_SIANG, 1.0, malamS) * naungan;
@@ -230,21 +204,18 @@ float glowFactor(float lenK, float skyL, float wkS, float malamS) {
     return terang * fade * pulse;
 }
 
-// hash awan: rumus sama dengan shader langit (sin), dipakai bayangan awan dan refleksi awan di air
 float hashAwan(vec2 q) {
     return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-// ===== bayangan awan (rumus sama dengan shader langit) =====
-// fc = gl_FragCoord.xy (dikirim dari main); dither tepi awan pakai Bayer 8x8, bukan hash acak
+//bayangan awan
 float awanBayang(vec2 awBase, vec2 fc) {
     float awDh = bayer8(fc);
     return step(0.88, hashAwan(floor(awBase * 1.33 + awDh * BAYANG_AWAN_DITHER + ViewPositionAndTime.w * AWAN_SPEED)));
 }
 
 #if defined(ALPHA_TEST) || defined(OPAQUE)
-// ===== refleksi awan di logam (lantai dan dinding) =====
-// inti: 12 lapis awan dari koordinat awBase
+//refleksi awan di logam
 float awanLapis(vec2 awBase, float spd, vec2 fc) {
     float awDh = bayer8(fc);
     float awShd = 0.0;
@@ -259,20 +230,16 @@ float awanLapis(vec2 awBase, float spd, vec2 fc) {
     return awShd;
 }
 
-// lantai: posisi awan dari jarak horizontal pantulan / tinggi awan TETAP,
-// jadi ukuran awan tidak berubah saat ketinggian kamera berubah. awH = pantulan xz (vektor kamera -> piksel)
 float awanRefMetal(vec2 awH, float spd, vec2 fc) {
     return awanLapis(vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI, spd, fc);
 }
 
-// dinding: rumus awanRef persis dari RenderChunk (arah pantul awR satuan -> awR.xz / awR.y)
 float awanRef(vec3 awR, float spd, vec2 fc) {
     vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
     return awanLapis(awBase, spd, fc) * smoothstep(0.0, 0.12, awR.y);
 }
 
-// ===== caustic (voronoi) =====
-// versi GLSL asli memakai "v.xyw *= mat3(...)"; ditulis manual supaya aman di semua platform
+//caustic
 vec3 vmatCaustic(vec3 v) {
     return vec3(-v.y + 2.0 * v.z, 3.0 * v.x - 2.0 * v.y + v.z, v.x + 2.0 * v.y + 2.0 * v.z);
 }
@@ -291,7 +258,6 @@ float vorolit(vec2 uv) {
     return pow(min(min(l5, l4), l3), 3.0) * 4.0;
 }
 
-// arah sinar matahari bawah air
 #define RAY_D  vec3(0.324617, -0.927478, 0.185496)
 #define RAY_T1 vec3(-0.943858, -0.330350, 0.0)
 #define RAY_T2 vec3(0.061279, -0.175082, -0.982645)
@@ -303,10 +269,6 @@ float causticRay(vec3 pp, vec3 nn) {
     return c;
 }
 
-// pp = p (posisi lokal chunk piksel ini), ww = wp (vektor kamera -> piksel, hanya untuk arah dan panjang garis pandang),
-// fc = gl_FragCoord.xy (dikirim dari main karena di HLSL tidak terlihat di dalam fungsi lain)
-// Pola berjangkar pada p, bukan pada posisi kamera, jadi tidak ikut bergerak bersama pemain.
-// Pola berulang tiap GODRAY_PERIODE blok (pembagi 16), jadi tidak terpotong di batas chunk.
 float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
     float tm = ViewPositionAndTime.w;
     float jit = bayer8(fc);
@@ -314,10 +276,8 @@ float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
     for (int i = 0; i < 6; i++) {
         float t = (float(i) + jit) / 6.0;
         vec3 sp = pp - ww * (1.0 - t);
-        // berkas miring + bergeser pelan menyamping seiring waktu
         vec2 q = vec2(sp.x + sp.y * GODRAY_MIRING + tm * GODRAY_GESER, sp.z + tm * GODRAY_GESER * 0.4);
         float n = noiseTile(q, GODRAY_PERIODE);
-        // tiap berkas berkedip dengan fase sendiri
         float kedip = 1.0 - GODRAY_KEDIP + GODRAY_KEDIP * (0.5 + 0.5 * sin(tm * 1.4 + n * 12.0));
         acc += smoothstep(0.40, 0.75, n) * kedip;
     }
@@ -362,7 +322,7 @@ void main() {
         diffuse.a = 1.0;
     } else {
 #if defined(OPAQUE)
-        // ===== AO =====
+        //AO
         vec3 _aoMul = v_color0.rgb;
         if (abs(v_color0.g - v_color0.r) < 0.002) {
             float ao = mix(0.55, 0.8, smoothstep(0.3, 0.7, v_color0.g));
@@ -392,7 +352,6 @@ void main() {
 #endif
 
 #if defined(ALPHA_TEST) || (defined(OPAQUE) && !defined(SEASONS))
-    // lightmap AlphaTest dan Opaque: di dimensi End cahaya block diredam dan diberi warna ungu
     float _endF = endFogAmt(v_fog);
     vec2 _lmUV = v_lightmapUV;
     _lmUV.x *= mix(1.0, END_BLOCKLIGHT, _endF);
@@ -401,7 +360,7 @@ void main() {
         float _lmL = dot(_lm, vec3(0.2125, 0.7154, 0.0721));
         vec3 _lmE = mix(vec3_splat(_lmL), _lm, END_LM_TINT);
         _lmE = mix(_lmE, _lmL * END_LIGHT_COL, saturate(v_lightmapUV.x) * END_LIGHT_AMT);
-        _lm = mix(_lm, _lmE, _endF); // peralihan halus
+        _lm = mix(_lm, _lmE, _endF);
     }
     diffuse.rgb *= _lm;
 #else
@@ -414,7 +373,6 @@ void main() {
 
     //var
 #if defined(SEASONS)
-    // di SEASONS v_color0 berisi data musim (bukan warna vertex); AlphaTest SEASONS = daun (hijau)
     vec4 color = vec4(0.0, 1.0, 0.0, 1.0);
     vec4 kolor = color;
 #else
@@ -432,7 +390,6 @@ void main() {
     float lenWp = length(wp);
     vec3 V = normalize(-wp);
     float NdotV = max(0.001, dot(N, V));
-    // texture LOD 0: alpha dipakai sebagai kode (250 = metalic, 252/253 = glow)
     vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
 
     //detect
@@ -487,13 +444,11 @@ void main() {
     shadow = mix(0.0, 0.65, shadow);
     _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), shadow);
 
-    //bayangan awan (lantai dan sisi block, bagian bawah tidak)
+    //bayangan awan
 #if BAYANG_AWAN
     if (N.y > -0.5) {
-        // hilang: malam, hujan, bawah air/nether/end, dan di bawah shadow block (goa/bangunan)
         float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
         if (bAktif > 0.001) {
-            // awan tepat di atas titik ini: base langit = xz / tinggi awan
             float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
             float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI, gl_FragCoord.xy) * smoothstep(0.0, 0.12, bDy);
             _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
@@ -511,12 +466,12 @@ void main() {
         vec3 sebelumMetal = _finalColor.rgb;
         vec3 fr = fresnel(vec3_splat(0.3), NdotV);
 
-        //lantai: pantulan langit biru, makin jauh makin putih
+        //lantai
         if (N.y > 0.5) {
             _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 70.0)), fr), siangd * (1.0 - hujand));
             _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenKs / 70.0)), fr), sored * (1.0 - hujand));
 
-            //awan ref (lantai)
+            //awan ref
             if (!udw) {
                 vec3 awRv = reflect(wp, N);
                 if (awRv.y > 0.0) {
@@ -528,7 +483,7 @@ void main() {
             }
         }
 
-        //sisi (dinding): warna atas dan bawah dicampur halus di sekitar tinggi mata
+        //sisi
         if (max(abs(N.x), abs(N.z)) > 0.5) {
             float awEl = wp.y / max(lenWp, 0.001);
             float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
@@ -541,7 +496,7 @@ void main() {
             _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
         }
 
-        //awan ref (dinding)
+        //awan ref
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
             vec3 awR = reflect(-V, N);
             if (awR.y > 0.0) {
@@ -558,7 +513,7 @@ void main() {
     if (!(udw && nether && akhir)) {
         _finalColor.rgb += vec3(-0.2, -0.1, -0.05) * dudan * (1.0 - malamd);
 
-        //genangan (hanya permukaan atas yang terbuka ke langit)
+        //genangan
         if (hujand > 0.0) {
             float langitTerbuka = smoothstep(0.88, 0.94, uv1.y);
             float gn = genangan(p.xz) * langitTerbuka * hujand * step(0.5, N.y);
@@ -631,7 +586,7 @@ void main() {
 
         float drl = max(max(-N.x, -N.z), -N.y);
         ec *= mix(vec3_splat(0.95), vec3_splat(0.5), drl * (1.0 - v_lightmapUV.x));
-        _finalColor.rgb = mix(_finalColor.rgb, ec, endF); // peralihan halus
+        _finalColor.rgb = mix(_finalColor.rgb, ec, endF);
     }
 
 #elif defined(ALPHA_TEST)
@@ -665,10 +620,9 @@ void main() {
     shadow = mix(0.0, 0.65, shadow);
     float endK = (fctl.x < 0.01) ? END_DIM : 1.0;
 
-    //bayangan awan (lantai dan sisi block, bagian bawah tidak)
+    //bayangan awan
 #if BAYANG_AWAN
     if (N.y > -0.5) {
-        // hilang: malam, hujan, bawah air/nether/end, dan di bawah shadow block
         float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
         if (bAktif > 0.001) {
             float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
@@ -678,7 +632,7 @@ void main() {
     }
 #endif
 
-    //metalic (AlphaTest)
+    //metalic
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
@@ -688,11 +642,11 @@ void main() {
         vec3 sebelumMetal = _finalColor.rgb;
         vec3 fr = fresnel(vec3_splat(0.3), NdotV);
 
-        //lantai: pantulan langit biru, makin jauh makin putih
+        //lantai
         if (N.y > 0.5) {
             _finalColor.rgb = mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 90.0)), fr);
 
-            //awan ref (lantai)
+            //awan ref
             if (!udw) {
                 vec3 awRv = reflect(wp, N);
                 if (awRv.y > 0.0) {
@@ -704,7 +658,7 @@ void main() {
             }
         }
 
-        //sisi (dinding): warna atas dan bawah dicampur halus di sekitar tinggi mata
+        //sisi
         if (max(abs(N.x), abs(N.z)) > 0.5) {
             float awEl = wp.y / max(lenWp, 0.001);
             float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
@@ -717,7 +671,7 @@ void main() {
             _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
         }
 
-        //awan ref (dinding)
+        //awan ref
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
             vec3 awR = reflect(-V, N);
             if (awR.y > 0.0) {
@@ -740,7 +694,7 @@ void main() {
 
         float drl = max(-N.x, -N.z);
         ec *= mix(vec3_splat(0.85), vec3_splat(0.65), drl * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)));
-        _finalColor.rgb = mix(_finalColor.rgb, ec, endF); // peralihan halus
+        _finalColor.rgb = mix(_finalColor.rgb, ec, endF);
     }
 
     //underwater
@@ -772,7 +726,7 @@ void main() {
 #elif defined(TRANSPARENT)
     bool banyu = (kolor.b > kolor.g || kolor.b > kolor.r);
 
-    //coloring, saturation and tonemap (bukan air)
+    //coloring, saturation and tonemap
     if (!(banyu)) {
         if (!akhir) {
             _finalColor.rgb *= vec3_splat(1.7);
@@ -783,20 +737,18 @@ void main() {
             _finalColor.xyz = Tm(_finalColor.xyz);
         }
 
-        //shadow (shadow khusus air ada di blok //air -> shadowAir)
+        //shadow
         float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
         float shadow = shadowRaw;
         shadow *= (1.0 - uv1.x);
         shadow *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
         shadow = mix(0.0, 0.65, shadow);
 
-        //bayangan awan (lantai dan sisi block, bagian bawah tidak)
+        //bayangan awan
     #if BAYANG_AWAN
         if (N.y > -0.5) {
-            // hilang: malam, hujan, bawah air/nether/end, dan di bawah shadow block (goa/bangunan)
             float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
             if (bAktif > 0.001) {
-                // awan tepat di atas titik ini: base langit = xz / tinggi awan
                 float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
                 float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI, gl_FragCoord.xy) * smoothstep(0.0, 0.12, bDy);
                 _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
@@ -810,8 +762,8 @@ void main() {
         vec3 f0 = vec3_splat(0.05);
         float tm = ViewPositionAndTime.w;
 
-        //gambar ombak (gelombang sinus)
-        float wave = ombakAir(p.xz, tm) * 0.85; // 0..0.85 (rentang sama seperti sebelumnya)
+        //gambar ombak
+        float wave = ombakAir(p.xz, tm) * 0.85;
 
         //warna air
         _finalColor = vec4(0.3, 0.5, 1.0, 1.0) * 0.7 * siangd * (1.0 - hujand);
@@ -821,8 +773,8 @@ void main() {
         _finalColor.rgb = satuR(_finalColor.rgb, 1.2) * siangd * (1.0 - goa);
         _finalColor.rgb += vec3(0.3, 0.5, 0.7) * goa;
 
-        //gradasi malam (warna sama dengan langit malam: abu gelap -> biru di sudut pandang miring/horizon)
-        float gradAir = mix(0.1, 1.0, smoothstep(AIR_GRAD_MULAI, AIR_GRAD_PENUH, lenWp)); // makin jauh makin biru
+        //gradasi malam
+        float gradAir = mix(0.1, 1.0, smoothstep(AIR_GRAD_MULAI, AIR_GRAD_PENUH, lenWp));
         vec3 airMalam = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), gradAir);
         _finalColor.rgb += airMalam * malamd * (1.0 - hujand) * (1.0 - goa) * 0.6;
 
@@ -833,22 +785,20 @@ void main() {
         //wave air
         _finalColor.rgb += wave * 0.1 * vec3(0.3, 0.5, 1.0) * 0.7 * malamd;
         _finalColor.rgb += wave * 0.1 * vec3_splat(1.0) * 0.3 * hujand;
-        //riak siang hari: terang-gelap lembut mengikuti ombak (sebelumnya ombak hanya terlihat saat malam / hujan)
+        //riak siang hari
         _finalColor.rgb += (wave - 0.42) * 0.5 * OMBAK_KUAT_SIANG * vec3(0.45, 0.7, 1.0) * siangd * (1.0 - hujand);
 
         //shadow block di air
-        float shadowAir = smoothstep(1.0, 0.95, uv1.y); // tanpa wave, supaya tidak muncul bercak gelap di air terbuka
+        float shadowAir = smoothstep(1.0, 0.95, uv1.y);
         shadowAir *= (1.0 - uv1.x);
         shadowAir *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
         shadowAir = mix(0.0, 0.65, shadowAir);
 
-        //refleksi awan di air (permukaan atas, bukan saat di bawah air)
+        //refleksi awan di air
         if (N.y > 0.5 && !udw) {
-            // posisi awan dari jarak horizontal / tinggi awan TETAP (bukan dari sudut pantul),
-            // jadi ukuran awan tidak berubah saat ketinggian kamera berubah, sama seperti bayangan awan di tanah
             float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
             vec2 awBase = vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI + wave * 0.05;
-            float awDh = bayer8(gl_FragCoord.xy); // dither Bayer
+            float awDh = bayer8(gl_FragCoord.xy);
             float awShd = 0.0;
             float awMm = 1.0;
             float awSc = 1.4;
@@ -858,21 +808,19 @@ void main() {
                 float awAwan = step(0.88, hashAwan(floor(awBase * awSc + awDh * 0.02 + tm * AWAN_SPEED)));
                 awShd = mix(awShd, awMm, awAwan);
             }
-            // refleksi awan hilang saat hujan (hujand), malam (wk = tingkat terang siang), dan di bawah shadow block
             float awSiang = smoothstep(0.2, 0.8, wk);
             float awMask = awShd * smoothstep(0.0, 0.12, awDy) * AWAN_AIR_KUAT * (1.0 - shadowAir / 0.65) * (1.0 - hujand) * awSiang;
             vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
             _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
         }
 
-        // bayangan: gelapkan warna air itu sendiri (tetap biru), bukan campur ke hitam
         _finalColor.rgb = mix(_finalColor.rgb, _finalColor.rgb * vec3(0.7, 0.82, 1.0), shadowAir * (0.6 + wave * 0.4));
 
         //fresnel air
         _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
 
-        //bintang di air (malam, hilang saat hujan, hanya permukaan atas)
-        vec2 sg = p.xz * 5.0 + wave * 0.15; // jangkar p (tidak ikut pemain), sedikit goyang ikut ombak
+        //bintang di air
+        vec2 sg = p.xz * 5.0 + wave * 0.15;
         vec2 sid = floor(sg);
         vec2 sfr = fract(sg) - 0.5;
         float sr = hash12(sid + 17.0);
@@ -880,11 +828,11 @@ void main() {
         float sdot = smoothstep(0.12, 0.0, length(sfr - sof)) * step(0.93, sr);
         float skedip = 0.5 + 0.5 * sin(tm * 2.5 + sr * 60.0);
         float starAir = sdot * skedip * malamd * (1.0 - hujand) * (1.0 - goa) * step(0.5, N.y);
-        starAir *= 1.0 - smoothstep(30.0, 80.0, lenWp); // jauh dipudarkan supaya tidak berpasir
+        starAir *= 1.0 - smoothstep(30.0, 80.0, lenWp);
         _finalColor.rgb += vec3(0.8, 0.9, 1.0) * starAir * 1.2;
         _finalColor.a = max(_finalColor.a, starAir * 0.9);
 
-        //underwater (permukaan air dilihat dari bawah)
+        //underwater
         float uw = float(fctl.x == 0.0 && fctl.y < 0.8 && (FogColor.z > FogColor.x || FogColor.y > FogColor.x));
         if (uw > 0.5 && N.y < -0.5) {
             _finalColor.rgb = mix(_finalColor.rgb, vec3(0.1, 0.45, 0.9), 0.85);
@@ -914,7 +862,6 @@ void main() {
         vec4 fgst = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(lenKs / 100.0)), (1.0 - hujand));
         _finalColor = fgst;
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
-        // fog bawah air tebal
         if (udw) {
             _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
         }
@@ -922,24 +869,20 @@ void main() {
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / 20.0)), hujand);
-    // fog bawah air tebal
     if (udw) {
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
     }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
-    // fog bawah air tebal
     if (udw) {
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenWp));
     }
 #endif
 
 #if defined(OPAQUE) || defined(ALPHA_TEST)
-    //god rays (dipasang setelah fog supaya tidak tertelan fog jarak jauh)
+    //god rays
     if (udw && wk > 0.05) {
-        // hilang di kejauhan (dan tidak muncul tepat di depan kamera)
         float grJarak = smoothstep(1.0, GODRAY_DEKAT, lenWp) * (1.0 - smoothstep(GODRAY_JAUH_MIN, GODRAY_JAUH_MAX, lenWp));
-        // laut dalam (1.0 - uv1.y) dan di bawah block: berkas dikalikan uv1.y (= v_lightmapUV.y)
         float grGate = grJarak * uv1.y;
         if (grGate > 0.001) {
             float grDens = godRayFog(p, wp, gl_FragCoord.xy);
