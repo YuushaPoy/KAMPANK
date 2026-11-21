@@ -64,6 +64,12 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define BAYANG_AWAN_KUAT 0.38
 #define BAYANG_AWAN_DITHER 0.02
 
+// ===== refleksi awan di air: harus SAMA dengan shader langit =====
+// kalau pola awan terbalik, coba AWAN_SX = -1.0 dan/atau AWAN_SZ = -1.0
+#define AWAN_SX 1.0
+#define AWAN_SZ 1.0
+#define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
+
 // ===== god rays bawah air =====
 #define GODRAY_POWER 0.8        // kekuatan berkas cahaya (0.0 = mati)
 #define GODRAY_DEKAT 5.0        // jarak (blok) sampai berkas penuh dari dekat kamera
@@ -117,6 +123,21 @@ float hash12(vec2 q) {
     vec3 p3 = fract(vec3(q.xyx) * 0.13);
     p3 += dot(p3, p3.yzx + 3.333);
     return fract((p3.x + p3.y) * p3.z);
+}
+
+// ===== dither Bayer 8x8 (ordered dither), hasil 0..1 =====
+// fc = gl_FragCoord.xy (dikirim dari main karena di HLSL gl_FragCoord tidak terlihat di dalam fungsi lain)
+float bayer2(vec2 a) {
+    a = floor(a);
+    return fract(a.x * 0.5 + a.y * a.y * 0.75);
+}
+
+float bayer4(vec2 a) {
+    return bayer2(0.5 * a) * 0.25 + bayer2(a);
+}
+
+float bayer8(vec2 a) {
+    return bayer4(0.5 * a) * 0.25 + bayer2(a);
 }
 
 vec3 fresnel(vec3 f0, float NdotV) {
@@ -174,11 +195,13 @@ float glowFactor(float lenK, float skyL, float wkS, float malamS) {
     return terang * fade * pulse;
 }
 
-#if defined(ALPHA_TEST) || defined(OPAQUE)
-// ===== bayangan awan (rumus sama dengan shader langit) =====
+// hash awan: rumus sama dengan shader langit (sin), dipakai bayangan awan dan refleksi awan di air
 float hashAwan(vec2 q) {
     return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
 }
+
+#if defined(ALPHA_TEST) || defined(OPAQUE)
+// ===== bayangan awan (rumus sama dengan shader langit) =====
 
 float awanBayang(vec2 awBase) {
     float awDh = hashAwan(awBase * 999.0);
@@ -238,7 +261,7 @@ float noiseTile(vec2 x, float per) {
 // Pola berulang tiap GODRAY_PERIODE blok (pembagi 16), jadi tidak terpotong di batas chunk.
 float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
     float tm = ViewPositionAndTime.w;
-    float jit = fract(dot(fc, vec2(0.06711056, 0.00583715)) * 52.9829189);
+    float jit = bayer8(fc);
     float acc = 0.0;
     for (int i = 0; i < 6; i++) {
         float t = (float(i) + jit) / 6.0;
@@ -464,7 +487,7 @@ void main() {
 
     //light
     if (!(akhir)) {
-        float jitB = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        float jitB = bayer8(gl_FragCoord.xy);
         float Lb = uv1.x + (jitB - 0.5) * 0.0625;
         float core = smoothstep(0.72, 0.94, Lb);
         core *= core;
@@ -682,6 +705,29 @@ void main() {
         shadowAir *= (1.0 - uv1.x);
         shadowAir *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
         shadowAir = mix(0.0, 0.65, shadowAir);
+
+        //refleksi awan di air (permukaan atas, bukan saat di bawah air)
+        if (N.y > 0.5 && !udw) {
+            vec3 awR = reflect(-V, N);
+            awR.xz += wave * 0.05;
+            vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
+            float awDh = hashAwan(awBase * 999.0);
+            float awShd = 0.0;
+            float awMm = 1.0;
+            float awSc = 1.4;
+            for (int awI = 0; awI < 12; awI++) {
+                awSc /= 1.009;
+                awMm *= 0.96;
+                float awAwan = step(0.88, hashAwan(floor(awBase * awSc + awDh * 0.02 + tm * AWAN_SPEED)));
+                awShd = mix(awShd, awMm, awAwan);
+            }
+            // refleksi awan hilang saat hujan (hujand), malam (wk = tingkat terang siang), dan di bawah shadow block
+            float awSiang = smoothstep(0.2, 0.8, wk);
+            float awMask = awShd * smoothstep(0.0, 0.12, awR.y) * AWAN_AIR_KUAT * (1.0 - shadowAir / 0.65) * (1.0 - hujand) * awSiang;
+            vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+            _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
+        }
+
         _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.08), shadowAir * (0.6 + wave * 0.4));
 
         //fresnel air
