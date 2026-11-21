@@ -214,7 +214,7 @@ float awanBayang(vec2 awBase, vec2 fc) {
     return step(0.88, hashAwan(floor(awBase * 1.33 + awDh * BAYANG_AWAN_DITHER + ViewPositionAndTime.w * AWAN_SPEED)));
 }
 
-#if defined(ALPHA_TEST) || defined(OPAQUE)
+#if defined(ALPHA_TEST) || defined(OPAQUE) || defined(TRANSPARENT)
 //refleksi awan di logam
 float awanLapis(vec2 awBase, float spd, vec2 fc) {
     float awDh = bayer8(fc);
@@ -283,7 +283,7 @@ float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
     }
     return acc / 6.0;
 }
-#endif // ALPHA_TEST || OPAQUE
+#endif // ALPHA_TEST || OPAQUE || TRANSPARENT
 #endif // KODE_EXTRA
 
 void main() {
@@ -755,6 +755,47 @@ void main() {
             }
         }
     #endif
+
+        //refleksi
+        float refAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
+        vec3 sebelumRef = _finalColor.rgb;
+        vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+
+        //lantai
+        if (N.y > 0.5) {
+            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenWp / 70.0)), fr), siangd * (1.0 - hujand));
+            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenWp / 70.0)), fr), sored * (1.0 - hujand));
+
+            //awan ref (lantai, sama seperti air)
+            if (!udw) {
+                float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+                float awShd = awanLapis(vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI, AWAN_SPEED, gl_FragCoord.xy);
+                float awSiang = smoothstep(0.2, 0.8, wk);
+                float awMask = awShd * smoothstep(0.0, 0.12, awDy) * AWAN_AIR_KUAT * (1.0 - shadow / 0.65) * (1.0 - hujand) * awSiang;
+                vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
+            }
+        }
+
+        //sisi
+        if (max(abs(N.x), abs(N.z)) > 0.5) {
+            float awEl = wp.y / max(lenWp, 0.001);
+            float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
+            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(wp.xz) / max(abs(wp.y), 0.1) * 0.1, 0.05, 0.7));
+            vec3 sisiBawah = vec3(212.0, 232.0, 255.0) / 255.0;
+            _finalColor.rgb = mix(_finalColor.rgb, mix(sisiBawah, sisiAtas, awAtas), fr);
+
+            vec3 soreAtas = vec3(0.1, 0.5, 1.0) * 1.2;
+            vec3 soreBawah = vec3(1.0, 0.8, 0.1);
+            _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
+
+            //awan ref (dinding)
+            if (wp.y > -0.05 && !udw) {
+                float awMask = awanRef(reflect(-V, N), AWAN_SPEED_DINDING, gl_FragCoord.xy);
+                _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, vec3_splat(1.0), awMask), fr);
+            }
+        }
+        _finalColor.rgb = mix(sebelumRef, _finalColor.rgb, refAktif);
     }
 
     //air
