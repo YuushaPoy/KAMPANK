@@ -165,16 +165,35 @@ vec3 satuR(vec3 v, float val) {
     return mix(sat, v, val);
 }
 
-float noiseWave(vec2 x) {
-    x.y -= ViewPositionAndTime.w * 0.02;
+// noise 2D yang berulang tiap 'per' sel, supaya pola menyambung mulus di batas chunk
+float noiseTile(vec2 x, float per) {
     vec2 i = floor(x);
     vec2 f = fract(x);
-    float a = hash12(i);
-    float b = hash12(i + vec2(1.0, 0.0));
-    float c = hash12(i + vec2(0.0, 1.0));
-    float d = hash12(i + vec2(1.0, 1.0));
+    vec2 i0 = i - per * floor(i / per);
+    vec2 i1 = i + vec2(1.0, 1.0);
+    i1 = i1 - per * floor(i1 / per);
+    float a = hash12(i0);
+    float b = hash12(vec2(i1.x, i0.y));
+    float c = hash12(vec2(i0.x, i1.y));
+    float d = hash12(i1);
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+// ===== ombak air =====
+// Memakai noiseTile (sama seperti god rays): berulang tiap OMBAK_PERIODE sel dan berjangkar pada p,
+// jadi tidak putus di batas chunk. Syarat menyambung: 16 x OMBAK_SKALA kelipatan OMBAK_PERIODE
+// (16 x 0.5 = 8 -> 1 periode; lapis kedua berskala 2x -> 16 = 2 periode).
+#define OMBAK_SKALA 0.5          // kerapatan ombak: 0.5 = 1 sel tiap 2 blok (naikkan = ombak lebih halus/rapat, pakai kelipatan 0.5)
+#define OMBAK_PERIODE 8.0
+#define OMBAK_GESER 1.0          // kecepatan ombak bergeser (0.0 = diam)
+#define OMBAK_KUAT_SIANG 0.25    // kekuatan riak di siang hari (0.0 = mati)
+float ombakAir(vec2 pxz, float tm) {
+    float g = tm * OMBAK_GESER;
+    // dua lapis noise dengan arah gerak berbeda
+    vec2 q1 = pxz * OMBAK_SKALA + vec2(g * 0.10, g * 0.07);
+    vec2 q2 = vec2(pxz.y, pxz.x) * (OMBAK_SKALA * 2.0) + vec2(-g * 0.16, g * 0.12);
+    return noiseTile(q1, OMBAK_PERIODE) * 0.65 + noiseTile(q2, OMBAK_PERIODE) * 0.35;
 }
 
 // ===== glow =====
@@ -268,21 +287,6 @@ float causticRay(vec3 pp, vec3 nn) {
     float c = smoothstep(0.2, 1.0, vorolit(q * 0.35));
     c *= mix(0.6, 1.0, saturate(dot(nn, -RAY_D)));
     return c;
-}
-
-// noise 2D yang berulang tiap 'per' sel, supaya pola menyambung mulus di batas chunk
-float noiseTile(vec2 x, float per) {
-    vec2 i = floor(x);
-    vec2 f = fract(x);
-    vec2 i0 = i - per * floor(i / per);
-    vec2 i1 = i + vec2(1.0, 1.0);
-    i1 = i1 - per * floor(i1 / per);
-    float a = hash12(i0);
-    float b = hash12(vec2(i1.x, i0.y));
-    float c = hash12(vec2(i0.x, i1.y));
-    float d = hash12(i1);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
 // pp = p (posisi lokal chunk piksel ini), ww = wp (vektor kamera -> piksel, hanya untuk arah dan panjang garis pandang),
@@ -790,11 +794,10 @@ void main() {
     //air
     if (banyu) {
         vec3 f0 = vec3_splat(0.05);
-        vec3 pot = p * 0.2;
         float tm = ViewPositionAndTime.w;
 
         //gambar ombak (dari noise)
-        float wave = sin(noiseWave(vec2(tm * 0.7 + pot.x + pot.x + pot.z * 3.0, tm * 1.2 + pot.z + pot.x + pot.z * 1.0 + pot.x * 2.0)));
+        float wave = sin(ombakAir(p.xz, tm));
 
         //warna air
         _finalColor = vec4(0.3, 0.5, 1.0, 1.0) * 0.7 * siangd * (1.0 - hujand);
@@ -816,6 +819,8 @@ void main() {
         //wave air
         _finalColor.rgb += wave * 0.1 * vec3(0.3, 0.5, 1.0) * 0.7 * malamd;
         _finalColor.rgb += wave * 0.1 * vec3_splat(1.0) * 0.3 * hujand;
+        //riak siang hari: terang-gelap lembut mengikuti ombak (sebelumnya ombak hanya terlihat saat malam / hujan)
+        _finalColor.rgb += (wave - 0.45) * OMBAK_KUAT_SIANG * vec3(0.45, 0.7, 1.0) * siangd * (1.0 - hujand);
 
         //shadow block di air
         float shadowAir = smoothstep(1.0, 0.95, uv1.y + wave * 0.05);
