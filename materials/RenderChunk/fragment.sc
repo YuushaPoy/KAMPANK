@@ -42,7 +42,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define END_LIGHT_AMT  0.85
 #define END_DIM        0.55
 
-// ===== metalic (alpha texture 250): hanya memantulkan warna langit, tanpa awan =====
+// ===== metalic (alpha texture 250): memantulkan warna langit dan awan =====
 #define SISI_HALUS 0.15   // kehalusan peralihan warna atas/bawah di dinding sekitar tinggi mata
 
 // ===== gradasi biru air saat malam =====
@@ -68,6 +68,8 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 // kalau pola awan terbalik, coba AWAN_SX = -1.0 dan/atau AWAN_SZ = -1.0
 #define AWAN_SX 1.0
 #define AWAN_SZ 1.0
+#define AWAN_METAL_KUAT 1.0   // kekuatan awan di pantulan logam (metalic)
+#define AWAN_SPEED_DINDING 0.04 // kecepatan awan di pantulan dinding logam
 #define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
 #define AWAN_AIR_TINGGI 10.0  // tinggi awan tetap untuk pantulan: makin KECIL = awan makin kecil (ukuran sel ~ tinggi / 1.4 blok)
 
@@ -202,6 +204,24 @@ float hashAwan(vec2 q) {
 }
 
 #if defined(ALPHA_TEST) || defined(OPAQUE)
+// ===== refleksi awan di logam (lantai dan dinding) =====
+// awH = vektor kamera -> piksel setelah dipantulkan (xz), spd = kecepatan awan
+// posisi awan dari jarak horizontal / tinggi awan TETAP, jadi ukuran awan tidak berubah saat ketinggian kamera berubah
+float awanRefMetal(vec2 awH, float spd) {
+    vec2 awBase = vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI;
+    float awDh = hashAwan(awBase * 999.0);
+    float awShd = 0.0;
+    float awMm = 1.0;
+    float awSc = 1.4;
+    for (int awI = 0; awI < 12; awI++) {
+        awSc /= 1.009;
+        awMm *= 0.96;
+        float awAwan = step(0.88, hashAwan(floor(awBase * awSc + awDh * 0.02 + ViewPositionAndTime.w * spd)));
+        awShd = mix(awShd, awMm, awAwan);
+    }
+    return awShd;
+}
+
 // ===== bayangan awan (rumus sama dengan shader langit) =====
 
 float awanBayang(vec2 awBase) {
@@ -440,7 +460,7 @@ void main() {
     shadow = mix(0.0, 0.65, shadow);
     _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), shadow);
 
-    //metalic (hanya refleksi warna langit, tanpa awan)
+    //metalic
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
@@ -454,6 +474,17 @@ void main() {
         if (N.y > 0.5) {
             _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 70.0)), fr), siangd * (1.0 - hujand));
             _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenKs / 70.0)), fr), sored * (1.0 - hujand));
+
+            //awan ref (lantai)
+            if (!udw) {
+                vec3 awRv = reflect(wp, N);
+                if (awRv.y > 0.0) {
+                    float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+                    float awMask = awanRefMetal(awRv.xz, 0.04) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
+                    vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                    _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+                }
+            }
         }
 
         //sisi (dinding): warna atas dan bawah dicampur halus di sekitar tinggi mata
@@ -467,6 +498,17 @@ void main() {
             vec3 soreAtas = vec3(0.1, 0.5, 1.0) * 1.2;
             vec3 soreBawah = vec3(1.0, 0.8, 0.1);
             _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
+        }
+
+        //awan ref (dinding, hanya di atas tinggi mata)
+        if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
+            vec3 awRv = reflect(wp, N);
+            if (awRv.y > 0.0) {
+                float awUp = awRv.y / max(lenWp, 0.001); // arah pantul ke atas: awan hilang mendekati tinggi mata
+                float awMask = awanRefMetal(awRv.xz, AWAN_SPEED_DINDING) * smoothstep(0.0, 0.12, awUp) * AWAN_METAL_KUAT;
+                vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+            }
         }
 
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
@@ -596,7 +638,7 @@ void main() {
     }
 #endif
 
-    //metalic (AlphaTest: hanya refleksi warna langit di lantai, tanpa awan)
+    //metalic (AlphaTest)
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
@@ -604,9 +646,48 @@ void main() {
     float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
+        vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+
+        //lantai: pantulan langit biru, makin jauh makin putih
         if (N.y > 0.5) {
-            _finalColor.rgb = mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 90.0)), fresnel(vec3_splat(0.3), NdotV));
+            _finalColor.rgb = mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 90.0)), fr);
+
+            //awan ref (lantai)
+            if (!udw) {
+                vec3 awRv = reflect(wp, N);
+                if (awRv.y > 0.0) {
+                    float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+                    float awMask = awanRefMetal(awRv.xz, 0.04) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
+                    vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                    _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+                }
+            }
         }
+
+        //sisi (dinding): warna atas dan bawah dicampur halus di sekitar tinggi mata
+        if (max(abs(N.x), abs(N.z)) > 0.5) {
+            float awEl = wp.y / max(lenWp, 0.001);
+            float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
+            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(wp.xz) / max(abs(wp.y), 0.1) * 0.1, 0.05, 0.7));
+            vec3 sisiBawah = vec3(212.0, 232.0, 255.0) / 255.0;
+            _finalColor.rgb = mix(_finalColor.rgb, mix(sisiBawah, sisiAtas, awAtas), fr);
+
+            vec3 soreAtas = vec3(0.1, 0.5, 1.0) * 1.2;
+            vec3 soreBawah = vec3(1.0, 0.8, 0.1);
+            _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
+        }
+
+        //awan ref (dinding, hanya di atas tinggi mata)
+        if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
+            vec3 awRv = reflect(wp, N);
+            if (awRv.y > 0.0) {
+                float awUp = awRv.y / max(lenWp, 0.001);
+                float awMask = awanRefMetal(awRv.xz, AWAN_SPEED_DINDING) * smoothstep(0.0, 0.12, awUp) * AWAN_METAL_KUAT;
+                vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+            }
+        }
+
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
 
