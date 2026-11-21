@@ -1,8 +1,12 @@
-$input v_color0, v_texcoord0, v_worldPos, fclr, p
+$input v_color0, v_texcoord0, v_worldPos, fclr, p, waktu
 
 #include <bgfx_shader.sh>
 
 uniform vec4 FogAndDistanceControl;
+
+float hash(vec2 q) {
+    return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
+}
 
 void main() {
     vec4 diffuse = v_color0;
@@ -37,6 +41,23 @@ void main() {
     vec4 cHujan = mix(vec4(0.3, 0.3, 0.3, 1.0) * 1.5, vec4(0.2, 0.2, 0.2, 1.0), grad);
     vec4 cMalam = mix(vec4(0.1, 0.1, 0.1, 1.0), vec4(0.1, 0.5, 1.0, 1.0), grad);
     diffuse = (cPagi * (pS + 0.0001) + cSore * duS + cHujan * rS + cMalam * nS) / (pS + 0.0001 + duS + rS + nS);
+
+    // ===== AWAN =====
+    vec3 d = normalize(v_worldPos);
+    vec2 base = d.xz / max(d.y, 0.02);
+    float dh = hash(base * 999.0);
+
+    float shd = 0.0;
+    float mm = 1.0;
+    float sc = 1.4;
+    for (int i = 0; i < 12; i++) {
+        sc /= 1.009;
+        mm *= 0.96;
+        float awan = step(0.88, hash(floor(base * sc + vec2_splat(dh * 0.02 + waktu * 0.04))));
+        shd = mix(shd, mm, awan);
+    }
+    float awanMask = shd * smoothstep(0.0, 0.12, d.y) * (1.0 - rS) * (1.0 - nS);
+    diffuse.rgb = mix(diffuse.rgb, vec3_splat(1.0), awanMask);
 #endif
 
     gl_FragColor = diffuse;
