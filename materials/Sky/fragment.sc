@@ -8,6 +8,23 @@ float hash(vec2 q) {
     return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
 }
 
+// ===== Bayer dithering (ordered dither, tanpa array / operasi bit) =====
+float bayer2(vec2 a) {
+    a = floor(a);
+    return fract(a.x / 2.0 + a.y * a.y * 0.75);
+}
+float bayer4(vec2 a) {
+    return bayer2(0.5 * a) * 0.25 + bayer2(a);
+}
+float bayer8(vec2 a) {
+    return bayer4(0.5 * a) * 0.25 + bayer2(a);
+}
+
+// 1 = dithering awan pakai Bayer 8x8 (rapi), 0 = pakai hash acak (versi lama)
+#define AWAN_BAYER 1
+// besar jitter di tepi awan (satuan sel awan)
+#define AWAN_DITHER 0.02
+
 void main() {
     vec4 diffuse = v_color0;
 
@@ -45,7 +62,11 @@ void main() {
     // ===== AWAN =====
     vec3 d = normalize(v_worldPos);
     vec2 base = d.xz / max(d.y, 0.02);
+#if AWAN_BAYER
+    float dh = bayer8(gl_FragCoord.xy);
+#else
     float dh = hash(base * 999.0);
+#endif
 
     float shd = 0.0;
     float mm = 1.0;
@@ -53,7 +74,7 @@ void main() {
     for (int i = 0; i < 12; i++) {
         sc /= 1.009;
         mm *= 0.96;
-        float awan = step(0.88, hash(floor(base * sc + vec2_splat(dh * 0.02 + waktu * 0.04))));
+        float awan = step(0.88, hash(floor(base * sc + vec2_splat(dh * AWAN_DITHER + waktu * 0.04))));
         shd = mix(shd, mm, awan);
     }
     float awanMask = shd * smoothstep(0.0, 0.12, d.y) * (1.0 - rS) * (1.0 - nS);
