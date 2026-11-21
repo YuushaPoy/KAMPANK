@@ -825,10 +825,10 @@ void main() {
         _finalColor.rgb += wave * 0.1 * vec3(0.3, 0.5, 1.0) * 0.7 * malamd;
         _finalColor.rgb += wave * 0.1 * vec3_splat(1.0) * 0.3 * hujand;
         //riak siang hari: terang-gelap lembut mengikuti ombak (sebelumnya ombak hanya terlihat saat malam / hujan)
-        _finalColor.rgb += (wave - 0.45) * OMBAK_KUAT_SIANG * vec3(0.45, 0.7, 1.0) * siangd * (1.0 - hujand);
+        _finalColor.rgb += (wave - 0.42) * 0.5 * OMBAK_KUAT_SIANG * vec3(0.45, 0.7, 1.0) * siangd * (1.0 - hujand);
 
         //shadow block di air
-        float shadowAir = smoothstep(1.0, 0.95, uv1.y + wave * 0.05);
+        float shadowAir = smoothstep(1.0, 0.95, uv1.y); // tanpa wave, supaya tidak muncul bercak gelap di air terbuka
         shadowAir *= (1.0 - uv1.x);
         shadowAir *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
         shadowAir = mix(0.0, 0.65, shadowAir);
@@ -856,7 +856,8 @@ void main() {
             _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
         }
 
-        _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.08), shadowAir * (0.6 + wave * 0.4));
+        // bayangan: gelapkan warna air itu sendiri (tetap biru), bukan campur ke hitam
+        _finalColor.rgb = mix(_finalColor.rgb, _finalColor.rgb * vec3(0.7, 0.82, 1.0), shadowAir * (0.6 + wave * 0.4));
 
         //fresnel air
         _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
