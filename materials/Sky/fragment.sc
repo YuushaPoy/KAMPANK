@@ -32,7 +32,7 @@ void main() {
     // ===== deteksi waktu dan cuaca (dari warna fog) =====
     float day = pow(max(min(1.0 - fclr.r * 1.2, 1.0), 0.0), 0.4);
     float night = pow(max(min(1.0 - fclr.r * 1.5, 1.0), 0.0), 1.2);
-    float dusk = clamp(fclr.r - fclr.g, 0.0, 0.5) * 2.0;
+    highp float dusk = clamp(fclr.r - fclr.g, 0.0, 0.5) * 2.0; // deteksi sore (highp supaya tidak bocor di GPU presisi rendah)
 
     vec2 rf = vec2(0.5 + 20.0 / FogAndDistanceControl.z, 1.0);
     vec2 rt = clamp((FogAndDistanceControl.xy - rf) / (vec2(0.23, 0.7) - rf), 0.0, 1.0);
@@ -54,7 +54,7 @@ void main() {
 
     //=====warna langit=====
     vec4 cPagi = mix(vec4(0.1, 0.5, 1.0, 1.0) * 0.7, vec4_splat(1.0), grad);
-    vec4 cSore = mix(vec4(0.1, 0.5, 1.0, 1.0) * 0.2, vec4(1.0, 0.8, 0.1, 1.0), grad);
+    vec4 cSore = mix(vec4(0.1, 0.5, 1.0, 1.0) * 0.7, vec4(1.0, 0.8, 0.1, 1.0), grad);
     vec4 cHujan = mix(vec4(0.3, 0.3, 0.3, 1.0) * 1.5, vec4(0.2, 0.2, 0.2, 1.0), grad);
     vec4 cMalam = mix(vec4(0.1, 0.1, 0.1, 1.0), vec4(0.1, 0.5, 1.0, 1.0), grad);
     diffuse = (cPagi * (pS + 0.0001) + cSore * duS + cHujan * rS + cMalam * nS) / (pS + 0.0001 + duS + rS + nS);
