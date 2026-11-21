@@ -70,7 +70,6 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define AWAN_SZ 1.0
 #define AWAN_METAL_KUAT 1.0   // kekuatan awan di pantulan logam (metalic)
 #define AWAN_SPEED_DINDING 0.04 // kecepatan awan di pantulan dinding logam
-#define AWAN_DINDING_JARAK 3.0  // jarak kamera ke dinding yang dianggap tetap untuk pantulan awan (ukuran awan tidak berubah saat kamera menjauh)
 #define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
 #define AWAN_AIR_TINGGI 10.0  // tinggi awan tetap untuk pantulan: makin KECIL = awan makin kecil (ukuran sel ~ tinggi / 1.4 blok)
 
@@ -204,6 +203,12 @@ float hashAwan(vec2 q) {
     return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
 }
 
+// ===== bayangan awan (rumus sama dengan shader langit) =====
+float awanBayang(vec2 awBase) {
+    float awDh = hashAwan(awBase * 999.0);
+    return step(0.88, hashAwan(floor(awBase * 1.33 + awDh * BAYANG_AWAN_DITHER + ViewPositionAndTime.w * AWAN_SPEED)));
+}
+
 #if defined(ALPHA_TEST) || defined(OPAQUE)
 // ===== refleksi awan di logam (lantai dan dinding) =====
 // inti: 12 lapis awan dari koordinat awBase
@@ -227,17 +232,10 @@ float awanRefMetal(vec2 awH, float spd) {
     return awanLapis(vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI, spd);
 }
 
-// dinding: rumus awanRef dari RenderChunk (arah pantul awR satuan -> awR.xz / awR.y)
+// dinding: rumus awanRef persis dari RenderChunk (arah pantul awR satuan -> awR.xz / awR.y)
 float awanRef(vec3 awR, float spd) {
     vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
     return awanLapis(awBase, spd) * smoothstep(0.0, 0.12, awR.y);
-}
-
-// ===== bayangan awan (rumus sama dengan shader langit) =====
-
-float awanBayang(vec2 awBase) {
-    float awDh = hashAwan(awBase * 999.0);
-    return step(0.88, hashAwan(floor(awBase * 1.33 + awDh * BAYANG_AWAN_DITHER + ViewPositionAndTime.w * AWAN_SPEED)));
 }
 
 // ===== caustic (voronoi) =====
@@ -471,6 +469,20 @@ void main() {
     shadow = mix(0.0, 0.65, shadow);
     _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), shadow);
 
+    //bayangan awan (lantai dan sisi block, bagian bawah tidak)
+#if BAYANG_AWAN
+    if (N.y > -0.5) {
+        // hilang: malam, hujan, bawah air/nether/end, dan di bawah shadow block (goa/bangunan)
+        float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
+        if (bAktif > 0.001) {
+            // awan tepat di atas titik ini: base langit = xz / tinggi awan
+            float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
+            float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI) * smoothstep(0.0, 0.12, bDy);
+            _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
+        }
+    }
+#endif
+
     //metalic
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
     if (v_ditheringAndMaskTinting.y > 0.5) {
@@ -511,19 +523,11 @@ void main() {
             _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
         }
 
-        //awan ref (dinding, hanya di atas tinggi mata)
+        //awan ref (dinding)
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
-            // jarak kamera ke dinding diganti konstan: ukuran awan tidak berubah saat kamera menjauh,
-            // pola tetap bervariasi di seluruh permukaan dinding (bukan garis mendatar)
-            vec3 awI = wp;
-            if (abs(N.x) > 0.5) {
-                awI.x = (wp.x >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
-            } else {
-                awI.z = (wp.z >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
-            }
-            vec3 awR = normalize(reflect(awI, N));
+            vec3 awR = reflect(-V, N);
             if (awR.y > 0.0) {
-                float awMask = awanRef(awR, AWAN_SPEED_DINDING) * AWAN_METAL_KUAT;
+                float awMask = awanRef(awR, AWAN_SPEED_DINDING);
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
             }
@@ -695,19 +699,11 @@ void main() {
             _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
         }
 
-        //awan ref (dinding, hanya di atas tinggi mata)
+        //awan ref (dinding)
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
-            // jarak kamera ke dinding diganti konstan: ukuran awan tidak berubah saat kamera menjauh,
-            // pola tetap bervariasi di seluruh permukaan dinding (bukan garis mendatar)
-            vec3 awI = wp;
-            if (abs(N.x) > 0.5) {
-                awI.x = (wp.x >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
-            } else {
-                awI.z = (wp.z >= 0.0) ? AWAN_DINDING_JARAK : -AWAN_DINDING_JARAK;
-            }
-            vec3 awR = normalize(reflect(awI, N));
+            vec3 awR = reflect(-V, N);
             if (awR.y > 0.0) {
-                float awMask = awanRef(awR, AWAN_SPEED_DINDING) * AWAN_METAL_KUAT;
+                float awMask = awanRef(awR, AWAN_SPEED_DINDING);
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
             }
@@ -769,12 +765,26 @@ void main() {
             _finalColor.xyz = Tm(_finalColor.xyz);
         }
 
-        //shadow (variabel pendukung; shadow khusus air ada di blok //air -> shadowAir)
+        //shadow (shadow khusus air ada di blok //air -> shadowAir)
         float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
         float shadow = shadowRaw;
         shadow *= (1.0 - uv1.x);
         shadow *= (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand) * (1.0 - hujand);
         shadow = mix(0.0, 0.65, shadow);
+
+        //bayangan awan (lantai dan sisi block, bagian bawah tidak)
+    #if BAYANG_AWAN
+        if (N.y > -0.5) {
+            // hilang: malam, hujan, bawah air/nether/end, dan di bawah shadow block (goa/bangunan)
+            float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
+            if (bAktif > 0.001) {
+                // awan tepat di atas titik ini: base langit = xz / tinggi awan
+                float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
+                float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI) * smoothstep(0.0, 0.12, bDy);
+                _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
+            }
+        }
+    #endif
     }
 
     //air
