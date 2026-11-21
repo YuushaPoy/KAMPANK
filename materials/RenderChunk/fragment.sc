@@ -181,19 +181,24 @@ float noiseTile(vec2 x, float per) {
 }
 
 // ===== ombak air =====
-// Memakai noiseTile (sama seperti god rays): berulang tiap OMBAK_PERIODE sel dan berjangkar pada p,
-// jadi tidak putus di batas chunk. Syarat menyambung: 16 x OMBAK_SKALA kelipatan OMBAK_PERIODE
-// (16 x 0.5 = 8 -> 1 periode; lapis kedua berskala 2x -> 16 = 2 periode).
-#define OMBAK_SKALA 0.5          // kerapatan ombak: 0.5 = 1 sel tiap 2 blok (naikkan = ombak lebih halus/rapat, pakai kelipatan 0.5)
-#define OMBAK_PERIODE 8.0
-#define OMBAK_GESER 1.0          // kecepatan ombak bergeser (0.0 = diam)
+// Gelombang air sederhana: beberapa gelombang sinus yang merambat ke arah berbeda (garis-garis riak lembut).
+// Berjangkar pada p (posisi lokal chunk 0..16), jadi tidak ikut bergerak bersama pemain.
+// Syarat menyambung di batas chunk: jumlah gelombang per 16 blok harus BILANGAN BULAT,
+// makanya frekuensinya = OMBAK_K * bilangan bulat (OMBAK_K = 2*PI/16).
+#define OMBAK_K 0.39269908       // 2*PI/16, jangan diubah supaya tidak putus di batas chunk
+#define OMBAK_GESER 1.0          // kecepatan gelombang bergeser (0.0 = diam)
 #define OMBAK_KUAT_SIANG 0.25    // kekuatan riak di siang hari (0.0 = mati)
+// hasil 0..1
 float ombakAir(vec2 pxz, float tm) {
     float g = tm * OMBAK_GESER;
-    // dua lapis noise dengan arah gerak berbeda
-    vec2 q1 = pxz * OMBAK_SKALA + vec2(g * 0.10, g * 0.07);
-    vec2 q2 = vec2(pxz.y, pxz.x) * (OMBAK_SKALA * 2.0) + vec2(-g * 0.16, g * 0.12);
-    return noiseTile(q1, OMBAK_PERIODE) * 0.65 + noiseTile(q2, OMBAK_PERIODE) * 0.35;
+    // gelombang utama: panjang ~7 blok, merambat diagonal
+    float w1 = sin(dot(pxz, vec2(2.0, 1.0)) * OMBAK_K + g * 1.3);
+    // gelombang kedua: panjang ~5 blok, arah menyilang
+    float w2 = sin(dot(pxz, vec2(-1.0, 3.0)) * OMBAK_K - g * 1.7);
+    // riak halus: panjang ~3 blok
+    float w3 = sin(dot(pxz, vec2(4.0, -3.0)) * OMBAK_K + g * 2.3);
+    float h = w1 * 0.5 + w2 * 0.3 + w3 * 0.2;   // -1..1
+    return 0.5 + 0.5 * h;
 }
 
 // ===== glow =====
@@ -796,8 +801,8 @@ void main() {
         vec3 f0 = vec3_splat(0.05);
         float tm = ViewPositionAndTime.w;
 
-        //gambar ombak (dari noise)
-        float wave = sin(ombakAir(p.xz, tm));
+        //gambar ombak (gelombang sinus)
+        float wave = ombakAir(p.xz, tm) * 0.85; // 0..0.85 (rentang sama seperti sebelumnya)
 
         //warna air
         _finalColor = vec4(0.3, 0.5, 1.0, 1.0) * 0.7 * siangd * (1.0 - hujand);
