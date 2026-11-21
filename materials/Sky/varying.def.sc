@@ -11,3 +11,4 @@ vec2 v_texcoord0 : TEXCOORD0;
 vec3 v_worldPos  : TEXCOORD3;
 vec4 fclr        : TEXCOORD1;
 vec3 p           : TEXCOORD2;
+float waktu      : TEXCOORD4;
