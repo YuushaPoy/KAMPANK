@@ -5,6 +5,17 @@ $input v_clipPosition, v_worldPosition, v_color0, v_ditheringAndMaskTinting, v_f
 
 uniform vec4 FogColor;
 uniform vec4 FogAndDistanceControl;
+
+// ===== fog bawah air (tebal, menutup dasar laut) =====
+// UDW_FOG_MAX   : pekat maksimum di kejauhan (1.0 = menutup penuh)
+// UDW_FOG_START : jarak mulai terasa
+// UDW_FOG_END   : jarak yang sudah mencapai pekat maksimum
+#define UDW_FOG_MAX   1.0
+#define UDW_FOG_START 8.0
+#define UDW_FOG_END   45.0
+float udwFog(float d) {
+    return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
+}
 uniform vec4 DitherParams;
 uniform vec4 DitherParams2[3];
 uniform vec4 ViewPositionAndTime;
@@ -719,12 +730,24 @@ void main() {
         vec4 fgst = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(lenKs / 100.0)), (1.0 - hujand));
         _finalColor = fgst;
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
+        // fog bawah air tebal
+        if (udw) {
+            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+        }
     }
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / 20.0)), hujand);
+    // fog bawah air tebal
+    if (udw) {
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+    }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
+    // fog bawah air tebal
+    if (udw) {
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenWp));
+    }
 #endif
 
 #if defined(OPAQUE) || defined(ALPHA_TEST)
