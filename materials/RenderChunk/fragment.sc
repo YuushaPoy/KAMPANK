@@ -31,6 +31,9 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define END_LIGHT_AMT  0.85
 #define END_DIM        0.55
 
+// ===== metalic (alpha texture 250): hanya memantulkan warna langit, tanpa awan =====
+#define SISI_HALUS 0.15   // kehalusan peralihan warna atas/bawah di dinding sekitar tinggi mata
+
 // ===== glow (dibaca dari alpha texture: 252 = glow penuh, 253 = glow redup) =====
 #define GLOW_INTENSITY 0.85       // kekuatan glow (0.0 = mati)
 #define GLOW_SIANG 0.35           // glow siang hari sebagai fraksi dari glow di tempat gelap
@@ -52,6 +55,8 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define GODRAY_JAUH_MIN 24.0    // mulai memudar di kejauhan
 #define GODRAY_JAUH_MAX 48.0    // hilang total di kejauhan
 #define GODRAY_GESER 0.10       // kecepatan berkas bergeser
+#define GODRAY_PERIODE 8.0      // pola berulang tiap 8 blok (membagi 16, jadi menyambung mulus di batas chunk)
+#define GODRAY_MIRING 0.5       // kemiringan berkas; 16 x 0.5 = 8 = 1 periode, jadi menyambung juga antar chunk vertikal
 #define GODRAY_KEDIP 0.30       // kedalaman kedipan (0.0 = tidak berkedip)
 
 // ===== ACESFilm tonemap =====
@@ -197,21 +202,35 @@ float causticRay(vec3 pp, vec3 nn) {
     return c;
 }
 
-// camW = posisi kamera di dunia, ww = vektor kamera -> piksel (wp), fc = gl_FragCoord.xy
-// (gl_FragCoord dikirim dari main karena di HLSL tidak terlihat di dalam fungsi lain)
-// berkas cahaya = noise yang konstan sepanjang arah sinar matahari, dijumlahkan sepanjang garis pandang.
-// Semua koordinat memakai posisi DUNIA (bukan lokal chunk dan bukan relatif pemain), jadi berkas
-// tetap di tempatnya saat pemain bergerak dan tidak terpotong di batas chunk.
-float godRayFog(vec3 camW, vec3 ww, vec2 fc) {
+// noise 2D yang berulang tiap 'per' sel, supaya pola menyambung mulus di batas chunk
+float noiseTile(vec2 x, float per) {
+    vec2 i = floor(x);
+    vec2 f = fract(x);
+    vec2 i0 = i - per * floor(i / per);
+    vec2 i1 = i + vec2(1.0, 1.0);
+    i1 = i1 - per * floor(i1 / per);
+    float a = hash12(i0);
+    float b = hash12(vec2(i1.x, i0.y));
+    float c = hash12(vec2(i0.x, i1.y));
+    float d = hash12(i1);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+// pp = p (posisi lokal chunk piksel ini), ww = wp (vektor kamera -> piksel, hanya untuk arah dan panjang garis pandang),
+// fc = gl_FragCoord.xy (dikirim dari main karena di HLSL tidak terlihat di dalam fungsi lain)
+// Pola berjangkar pada p, bukan pada posisi kamera, jadi tidak ikut bergerak bersama pemain.
+// Pola berulang tiap GODRAY_PERIODE blok (pembagi 16), jadi tidak terpotong di batas chunk.
+float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
     float tm = ViewPositionAndTime.w;
     float jit = fract(dot(fc, vec2(0.06711056, 0.00583715)) * 52.9829189);
     float acc = 0.0;
     for (int i = 0; i < 6; i++) {
         float t = (float(i) + jit) / 6.0;
-        vec3 sp = camW + ww * t;
-        // bergeser pelan menyamping seiring waktu
-        vec2 q = vec2(dot(sp, RAY_T1) + tm * GODRAY_GESER, dot(sp, RAY_T2) + tm * GODRAY_GESER * 0.4);
-        float n = noiseWave(q * 0.6);
+        vec3 sp = pp - ww * (1.0 - t);
+        // berkas miring + bergeser pelan menyamping seiring waktu
+        vec2 q = vec2(sp.x + sp.y * GODRAY_MIRING + tm * GODRAY_GESER, sp.z + tm * GODRAY_GESER * 0.4);
+        float n = noiseTile(q, GODRAY_PERIODE);
         // tiap berkas berkedip dengan fase sendiri
         float kedip = 1.0 - GODRAY_KEDIP + GODRAY_KEDIP * (0.5 + 0.5 * sin(tm * 1.4 + n * 12.0));
         acc += smoothstep(0.40, 0.75, n) * kedip;
@@ -328,6 +347,8 @@ void main() {
     float lenWp = length(wp);
     vec3 V = normalize(-wp);
     float NdotV = max(0.001, dot(N, V));
+    // texture LOD 0: alpha dipakai sebagai kode (250 = metalic, 252/253 = glow)
+    vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
 
     //detect
     float goa = smoothstep(0.5, 0.0, uv1.y);
@@ -379,6 +400,38 @@ void main() {
     shadow *= (1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-hujand)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd)*(1.0-malamd);
     shadow = mix(0.0, 0.65, shadow);
     _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), shadow);
+
+    //metalic (hanya refleksi warna langit, tanpa awan)
+    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
+    if (v_ditheringAndMaskTinting.y > 0.5) {
+        metalic = false;
+    }
+    float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
+    if (metalic && metalAktif > 0.001) {
+        vec3 sebelumMetal = _finalColor.rgb;
+        vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+
+        //lantai: pantulan langit biru, makin jauh makin putih
+        if (N.y > 0.5) {
+            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 70.0)), fr), siangd * (1.0 - hujand));
+            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenKs / 70.0)), fr), sored * (1.0 - hujand));
+        }
+
+        //sisi (dinding): warna atas dan bawah dicampur halus di sekitar tinggi mata
+        if (max(abs(N.x), abs(N.z)) > 0.5) {
+            float awEl = wp.y / max(lenWp, 0.001);
+            float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
+            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(wp.xz) / max(abs(wp.y), 0.1) * 0.1, 0.05, 0.7));
+            vec3 sisiBawah = vec3(212.0, 232.0, 255.0) / 255.0;
+            _finalColor.rgb = mix(_finalColor.rgb, mix(sisiBawah, sisiAtas, awAtas), fr);
+
+            vec3 soreAtas = vec3(0.1, 0.5, 1.0) * 1.2;
+            vec3 soreBawah = vec3(1.0, 0.8, 0.1);
+            _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
+        }
+
+        _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
+    }
 
     //hujan
     if (!(udw && nether && akhir)) {
@@ -438,7 +491,6 @@ void main() {
 
     //glow
     {
-        vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
         float oreGlow = oreGlowCode(oreTex.w);
         if (v_ditheringAndMaskTinting.y > 0.5) {
             oreGlow = 0.0;
@@ -505,6 +557,20 @@ void main() {
     }
 #endif
 
+    //metalic (AlphaTest: hanya refleksi warna langit di lantai, tanpa awan)
+    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
+    if (v_ditheringAndMaskTinting.y > 0.5) {
+        metalic = false;
+    }
+    float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
+    if (metalic && metalAktif > 0.001) {
+        vec3 sebelumMetal = _finalColor.rgb;
+        if (N.y > 0.5) {
+            _finalColor.rgb = mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 90.0)), fresnel(vec3_splat(0.3), NdotV));
+        }
+        _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
+    }
+
     //end
     if (akhir) {
         vec3 ec = _finalColor.rgb * END_BRIGHT * endK;
@@ -538,7 +604,6 @@ void main() {
 
     //glow
     {
-        vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
         float oreGlow = oreGlowCode(oreTex.w);
         if (oreGlow > 0.0) {
             _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
@@ -608,7 +673,7 @@ void main() {
         _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
 
         //bintang di air (malam, hilang saat hujan, hanya permukaan atas)
-        vec2 sg = (wp.xz + ViewPositionAndTime.xz) * 5.0 + wave * 0.15; // posisi dunia, sedikit goyang ikut ombak
+        vec2 sg = p.xz * 5.0 + wave * 0.15; // jangkar p (tidak ikut pemain), sedikit goyang ikut ombak
         vec2 sid = floor(sg);
         vec2 sfr = fract(sg) - 0.5;
         float sr = hash12(sid + 17.0);
@@ -634,7 +699,6 @@ void main() {
 
     //glow
     {
-        vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
         float oreGlow = oreGlowCode(oreTex.w);
         if (v_ditheringAndMaskTinting.y > 0.5) {
             oreGlow = 0.0;
@@ -667,7 +731,7 @@ void main() {
         // laut dalam (1.0 - uv1.y) dan di bawah block: berkas dikalikan uv1.y (= v_lightmapUV.y)
         float grGate = grJarak * uv1.y;
         if (grGate > 0.001) {
-            float grDens = godRayFog(ViewPositionAndTime.xyz, wp, gl_FragCoord.xy);
+            float grDens = godRayFog(p, wp, gl_FragCoord.xy);
             float grBawah = smoothstep(-0.7, -0.2, N.y);
             float grA = grDens * grGate * wk * grBawah * GODRAY_POWER;
             _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(grA));
