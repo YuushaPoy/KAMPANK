@@ -37,11 +37,16 @@ vec3 gerak(vec3 lpos, vec4 col, float sky) {
 
 #if defined(ALPHA_TEST) || defined(DEPTH_ONLY_ALPHA_TEST)
     //daun dan rumput
+    #if defined(SEASONS)
+    //SEASONS: a_color0 berisi data musim (bukan warna), jadi semua vertex AlphaTest SEASONS ikut bergerak
+    o.x += sin(t * 2.0 + ph) * 0.03;
+    #else
     bool tinted = (col.r != col.g && col.g != col.b && frp.y != 0.015625);
     bool pucuk = (frp.y == 0.9375 && (frp.x == 0.0 || frp.z == 0.0));
     if (col.a == 0.0 || tinted || pucuk) {
         o.x += sin(t * 2.0 + ph) * 0.03;
     }
+    #endif
 #endif
 
 #if defined(TRANSPARENT)
