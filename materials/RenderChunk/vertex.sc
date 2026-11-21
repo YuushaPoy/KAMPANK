@@ -17,6 +17,47 @@ uniform vec4 MeshContext;
 // intensitas fog bawaan AlphaTest dikali ini (fog tambahan ada di fragment, blok //fog)
 #define FOG_AMOUNT 0.3
 
+//bawah air (bukan nether, bukan End)
+bool underwater() {
+    vec4 f = FogColor;
+    bool nether = (f.r > f.b && f.r < 0.5 && f.b < 0.2);
+    float ungu = smoothstep(0.0, 0.012, min(f.r, f.b) - f.g);
+    float gelap = 1.0 - smoothstep(0.05, 0.14, max(f.r, max(f.g, f.b)));
+    bool akhir = ungu * gelap > 0.01;
+    bool biru = (f.b > f.r || f.g > f.r);
+    return FogAndDistanceControl.x < 0.01 && !nether && !akhir && biru;
+}
+
+//gerakan vertex (offset dalam ruang dunia)
+vec3 gerak(vec3 lpos, vec4 col, float sky) {
+    float t = ViewPositionAndTime.w;
+    float ph = (lpos.x + lpos.y + lpos.z) * 1.1781;
+    vec3 frp = fract(lpos);
+    vec3 o = vec3_splat(0.0);
+
+#if defined(ALPHA_TEST) || defined(DEPTH_ONLY_ALPHA_TEST)
+    //daun dan rumput
+    bool tinted = (col.r != col.g && col.g != col.b && frp.y != 0.015625);
+    bool pucuk = (frp.y == 0.9375 && (frp.x == 0.0 || frp.z == 0.0));
+    if (col.a == 0.0 || tinted || pucuk) {
+        o.x += sin(t * 2.0 + ph) * 0.03;
+    }
+#endif
+
+#if defined(TRANSPARENT)
+    //air
+    if (col.b > col.r) {
+        o.y += sin(t * 4.0 + (lpos.x + lpos.z) * 1.9635 + lpos.y * 0.3927) * sin(lpos.z * 1.1781) * 0.05 * sky * frp.y;
+    }
+#endif
+
+    //underwater
+    if (underwater()) {
+        o.x += sin(t * 2.0 + ph) * 0.03;
+    }
+    return o;
+}
+
 void main() {
 #ifdef INSTANCING
     mat4 model = mtxFromCols(i_data1, i_data2, i_data3, vec4(0.0, 0.0, 0.0, 1.0));
@@ -55,7 +96,12 @@ void main() {
     float ditherY = float((uv1_16.y & 256u) != 0u ? 1.0 : 0.0);
     vec2 ditheringAndMaskTinting = vec2(ditherX, ditherY);
 
-    vec4 position = jitterVertexPosition(worldPos);
+    //gerak
+    vec3 gerakOff = vec3_splat(0.0);
+#if !defined(INSTANCING) && !defined(RENDER_AS_BILLBOARDS)
+    gerakOff = gerak(a_position, a_color0, lightmapUV.y);
+#endif
+    vec4 position = jitterVertexPosition(worldPos + gerakOff);
 
     float camDist = length(ViewPositionAndTime.xyz - worldPos);
     float fogIntensity = clamp((((camDist / fogAndDist.z) + RenderChunkFogAlpha.x) - fogAndDist.x) / (fogAndDist.y - fogAndDist.x), 0.0, 1.0);
