@@ -69,6 +69,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define AWAN_SX 1.0
 #define AWAN_SZ 1.0
 #define AWAN_AIR_KUAT 0.3     // kekuatan awan di pantulan air
+#define AWAN_AIR_TINGGI 40.0  // tinggi awan tetap untuk pantulan (sama dengan bayangan awan): makin besar = awan makin besar
 
 // ===== god rays bawah air =====
 #define GODRAY_POWER 0.8        // kekuatan berkas cahaya (0.0 = mati)
@@ -708,9 +709,10 @@ void main() {
 
         //refleksi awan di air (permukaan atas, bukan saat di bawah air)
         if (N.y > 0.5 && !udw) {
-            vec3 awR = reflect(-V, N);
-            awR.xz += wave * 0.05;
-            vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
+            // posisi awan dari jarak horizontal / tinggi awan TETAP (bukan dari sudut pantul),
+            // jadi ukuran awan tidak berubah saat ketinggian kamera berubah, sama seperti bayangan awan di tanah
+            float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+            vec2 awBase = vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI + wave * 0.05;
             float awDh = hashAwan(awBase * 999.0);
             float awShd = 0.0;
             float awMm = 1.0;
@@ -723,7 +725,7 @@ void main() {
             }
             // refleksi awan hilang saat hujan (hujand), malam (wk = tingkat terang siang), dan di bawah shadow block
             float awSiang = smoothstep(0.2, 0.8, wk);
-            float awMask = awShd * smoothstep(0.0, 0.12, awR.y) * AWAN_AIR_KUAT * (1.0 - shadowAir / 0.65) * (1.0 - hujand) * awSiang;
+            float awMask = awShd * smoothstep(0.0, 0.12, awDy) * AWAN_AIR_KUAT * (1.0 - shadowAir / 0.65) * (1.0 - hujand) * awSiang;
             vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
             _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
         }
