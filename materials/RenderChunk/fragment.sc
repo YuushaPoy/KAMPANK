@@ -116,8 +116,16 @@ vec3 saturation(vec3 rgb, float adjustment) {
     return mix(intensity, rgb, adjustment);
 }
 
+// tingkat "ini dimensi End" 0..1 dari warna fog (halus, bukan ya/tidak).
+// Warna fog End berubah sedikit saat ender dragon ada / tidak ada; dulu ambang keras (< 0.05)
+// membuat warna terrain melompat. Sekarang tepinya dilembutkan supaya peralihan mulus.
+float endFogAmt(vec4 f) {
+    float ungu = smoothstep(0.0, 0.012, min(f.r, f.b) - f.g);       // merah dan biru di atas hijau
+    float gelap = 1.0 - smoothstep(0.05, 0.14, max(f.r, max(f.g, f.b))); // fog tetap gelap
+    return ungu * gelap;
+}
 bool endFog(vec4 f) {
-    return (f.r > f.g && f.b > f.g && f.r < 0.05 && f.b < 0.05 && f.g < 0.05);
+    return endFogAmt(f) > 0.01;
 }
 
 #if defined(KODE_EXTRA)
@@ -358,7 +366,7 @@ void main() {
         if (abs(v_color0.g - v_color0.r) < 0.002) {
             float ao = mix(0.55, 0.8, smoothstep(0.3, 0.7, v_color0.g));
             float terbuka = smoothstep(0.55, 0.9, v_lightmapUV.y);
-            terbuka = max(terbuka, step(FogAndDistanceControl.x, 0.00999) * (endFog(v_fog) ? 0.0 : 1.0));
+            terbuka = max(terbuka, step(FogAndDistanceControl.x, 0.00999) * (1.0 - endFogAmt(v_fog)));
             ao = mix(0.8, ao, terbuka);
             _aoMul = vec3_splat(ao);
         }
@@ -384,16 +392,15 @@ void main() {
 
 #if defined(ALPHA_TEST) || (defined(OPAQUE) && !defined(SEASONS))
     // lightmap AlphaTest dan Opaque: di dimensi End cahaya block diredam dan diberi warna ungu
-    bool _akhirE = endFog(v_fog);
+    float _endF = endFogAmt(v_fog);
     vec2 _lmUV = v_lightmapUV;
-    if (_akhirE) {
-        _lmUV.x *= END_BLOCKLIGHT;
-    }
+    _lmUV.x *= mix(1.0, END_BLOCKLIGHT, _endF);
     vec3 _lm = texture2D(s_LightMapTexture, _lmUV).rgb;
-    if (_akhirE) {
+    if (_endF > 0.001) {
         float _lmL = dot(_lm, vec3(0.2125, 0.7154, 0.0721));
-        _lm = mix(vec3_splat(_lmL), _lm, END_LM_TINT);
-        _lm = mix(_lm, _lmL * END_LIGHT_COL, saturate(v_lightmapUV.x) * END_LIGHT_AMT);
+        vec3 _lmE = mix(vec3_splat(_lmL), _lm, END_LM_TINT);
+        _lmE = mix(_lmE, _lmL * END_LIGHT_COL, saturate(v_lightmapUV.x) * END_LIGHT_AMT);
+        _lm = mix(_lm, _lmE, _endF); // peralihan halus
     }
     diffuse.rgb *= _lm;
 #else
@@ -439,7 +446,8 @@ void main() {
     float rk = rt.x * rt.y;
     float hujand = rk * rk * (3.0 - 2.0 * rk);
     bool nether = (fclr.r > fclr.b && fclr.r < 0.5 && fclr.b < 0.2);
-    bool akhir = endFog(fclr);
+    float endF = endFogAmt(fclr);
+    bool akhir = endF > 0.01;
 #if defined(TRANSPARENT)
     bool udw = (fctl.x == 0.0) && !akhir;
 #else
@@ -447,7 +455,7 @@ void main() {
 #endif
     float isnether = step(fclr.b, fclr.r) * step(fclr.r, 0.4999) * step(fclr.b, 0.1999);
     float isudw = step(fctl.x, 0.00999) * (akhir ? 0.0 : 1.0);
-    float isakhir = akhir ? 1.0 : 0.0;
+    float isakhir = endF;
 
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
@@ -619,10 +627,10 @@ void main() {
         vec3 eo = max(ec - vec3_splat(END_SHOULDER), vec3_splat(0.0));
         float ek = 1.0 - END_SHOULDER;
         ec = min(ec, vec3_splat(END_SHOULDER)) + ek * (vec3_splat(1.0) - exp(-eo / ek));
-        _finalColor.rgb = ec;
 
         float drl = max(max(-N.x, -N.z), -N.y);
-        _finalColor.xyz *= mix(vec3_splat(0.95), vec3_splat(0.5), drl * (1.0 - v_lightmapUV.x));
+        ec *= mix(vec3_splat(0.95), vec3_splat(0.5), drl * (1.0 - v_lightmapUV.x));
+        _finalColor.rgb = mix(_finalColor.rgb, ec, endF); // peralihan halus
     }
 
 #elif defined(ALPHA_TEST)
@@ -728,10 +736,10 @@ void main() {
         vec3 eo = max(ec - vec3_splat(END_SHOULDER), vec3_splat(0.0));
         float ek = 1.0 - END_SHOULDER;
         ec = min(ec, vec3_splat(END_SHOULDER)) + ek * (vec3_splat(1.0) - exp(-eo / ek));
-        _finalColor.rgb = ec;
 
         float drl = max(-N.x, -N.z);
-        _finalColor.xyz *= mix(vec3_splat(0.85), vec3_splat(0.65), drl * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)));
+        ec *= mix(vec3_splat(0.85), vec3_splat(0.65), drl * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)));
+        _finalColor.rgb = mix(_finalColor.rgb, ec, endF); // peralihan halus
     }
 
     //underwater
