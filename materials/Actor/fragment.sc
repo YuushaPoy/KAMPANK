@@ -67,13 +67,13 @@ highp vec3 actorSaturation(highp vec3 rgb, highp float adjustment) {
 }
 
 //grade
-highp vec3 actorGrade(highp vec3 c) {
+highp vec3 actorGrade(highp vec3 c, highp vec4 vFog, highp vec4 vClip, highp vec4 vLight, highp vec3 vWorld) {
     highp vec4 fctl = FogControl;
     if (fctl.z < 1.0) {
         return c;
     }
-    highp vec4 fclr = v_fog;
-    highp vec3 ks = v_clipPosition.xyz;
+    highp vec4 fclr = vFog;
+    highp vec3 ks = vClip.xyz;
     highp float endF = endFogAmt(fclr);
     bool akhir = endF > 0.01;
     bool udw = (fctl.x < 0.01) && !akhir;
@@ -82,16 +82,16 @@ highp vec3 actorGrade(highp vec3 c) {
 
     //AO
 #if ACTOR_AO
-    highp float lumAo = dot(v_light.xyz, vec3_splat(0.3333));
+    highp float lumAo = dot(vLight.xyz, vec3_splat(0.3333));
     c *= mix(mix(ACTOR_AO_MIN, ACTOR_AO_MAX, smoothstep(0.3, 0.7, lumAo)), ACTOR_AO_MAX, endF);
 #endif
 
     //dirlight
-    highp vec3 cr = cross(dFdx(v_worldPos), dFdy(v_worldPos));
+    highp vec3 cr = cross(dFdx(vWorld), dFdy(vWorld));
     highp vec3 N = cr / max(length(cr), 0.000001);
     highp float fogL = dot(fclr.rgb, vec3(0.2125, 0.7154, 0.0721));
     highp float wk = smoothstep(0.08, 0.4, fogL);
-    highp float uvy = smoothstep(0.25, 0.55, dot(v_light.xyz, vec3_splat(0.3333)));
+    highp float uvy = smoothstep(0.25, 0.55, dot(vLight.xyz, vec3_splat(0.3333)));
     highp float malamd = 1.0 - wk * uvy;
     highp vec2 rf = vec2(0.5 + 20.0 / fctl.z, 1.0);
     highp vec2 rt = clamp((fctl.xy - rf) / (vec2(0.23, 0.7) - rf), 0.0, 1.0);
@@ -140,26 +140,26 @@ highp vec3 actorGrade(highp vec3 c) {
 }
 
 //haze
-highp vec3 actorHaze(highp vec3 c) {
+highp vec3 actorHaze(highp vec3 c, highp vec4 vFog, highp vec4 vClip) {
     highp vec4 fctl = FogControl;
     if (fctl.z < 1.0) {
         return c;
     }
-    highp vec3 ks = v_clipPosition.xyz;
+    highp vec3 ks = vClip.xyz;
     highp vec2 rf = vec2(0.5 + 20.0 / fctl.z, 1.0);
     highp vec2 rt = clamp((fctl.xy - rf) / (vec2(0.23, 0.7) - rf), 0.0, 1.0);
     highp float rk = rt.x * rt.y;
     highp float hujand = rk * rk * (3.0 - 2.0 * rk);
-    highp vec3 h = mix(c, v_fog.xyz * sqrt(vec3_splat(1.1)), ACTOR_APA * clamp(length(-ks) / 100.0, 0.0, 1.0));
-    return mix(mix(c, h, 1.0 - hujand), c, endFogAmt(v_fog));
+    highp vec3 h = mix(c, vFog.xyz * sqrt(vec3_splat(1.1)), ACTOR_APA * clamp(length(-ks) / 100.0, 0.0, 1.0));
+    return mix(mix(c, h, 1.0 - hujand), c, endFogAmt(vFog));
 }
 
 //light
-highp vec4 actorLight() {
-    highp vec4 l = v_light;
+highp vec4 actorLight(highp vec4 vLight, highp vec4 vFog) {
+    highp vec4 l = vLight;
     if (FogControl.z >= 1.0) {
         highp float ll = dot(l.xyz, vec3(0.2125, 0.7154, 0.0721));
-        l.xyz = mix(l.xyz, mix(vec3_splat(ll), l.xyz, END_LM_TINT), endFogAmt(v_fog));
+        l.xyz = mix(l.xyz, mix(vec3_splat(ll), l.xyz, END_LM_TINT), endFogAmt(vFog));
     }
     return l;
 }
@@ -196,7 +196,7 @@ void main() {
     albedo.a = max(UseAlphaRewrite.x, albedo.a);
 #endif
 
-    albedo = applyActorDiffuse(albedo, v_color0.rgb, actorLight(), ColorBased.x, OverlayColor);
+    albedo = applyActorDiffuse(albedo, v_color0.rgb, actorLight(v_light, v_fog), ColorBased.x, OverlayColor);
 
 #if defined(TRANSPARENT)
     albedo = applyHudOpacity(albedo, HudOpacity.x);
@@ -205,9 +205,9 @@ void main() {
     }
 #endif
 
-    albedo.rgb = actorGrade(albedo.rgb);
+    albedo.rgb = actorGrade(albedo.rgb, v_fog, v_clipPosition, v_light, v_worldPos);
     albedo.rgb = applyFog(albedo.rgb, v_fog.rgb, v_fog.a);
-    albedo.rgb = actorHaze(albedo.rgb);
+    albedo.rgb = actorHaze(albedo.rgb, v_fog, v_clipPosition);
     gl_FragColor = albedo;
 #endif
 }
