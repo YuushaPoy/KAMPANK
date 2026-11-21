@@ -48,7 +48,14 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 
 // ===== god rays bawah air =====
 #define GODRAY_POWER 0.8        // kekuatan berkas cahaya (0.0 = mati)
-#define GODRAY_JARAK 24.0       // jarak (blok) sampai berkas mencapai kekuatan penuh
+#define GODRAY_DEKAT 5.0        // jarak (blok) sampai berkas penuh dari dekat kamera
+#define GODRAY_JAUH_MIN 24.0    // mulai memudar di kejauhan
+#define GODRAY_JAUH_MAX 48.0    // hilang total di kejauhan
+#define GODRAY_LAUT 63.0        // ketinggian permukaan laut
+#define GODRAY_DALAM_MIN 12.0   // kedalaman kamera (dari permukaan laut) mulai memudar
+#define GODRAY_DALAM_MAX 28.0   // laut dalam: berkas hilang total
+#define GODRAY_GESER 0.10       // kecepatan berkas bergeser
+#define GODRAY_KEDIP 0.30       // kedalaman kedipan (0.0 = tidak berkedip)
 
 // ===== ACESFilm tonemap =====
 vec3 ACESFilm(vec3 x) {
@@ -195,15 +202,22 @@ float causticRay(vec3 pp, vec3 nn) {
 
 // camW = posisi kamera di dunia, ww = vektor kamera -> piksel (wp), fc = gl_FragCoord.xy
 // (gl_FragCoord dikirim dari main karena di HLSL tidak terlihat di dalam fungsi lain)
-// berkas cahaya = noise yang konstan sepanjang arah sinar matahari, dijumlahkan sepanjang garis pandang
+// berkas cahaya = noise yang konstan sepanjang arah sinar matahari, dijumlahkan sepanjang garis pandang.
+// Semua koordinat memakai posisi DUNIA (bukan lokal chunk dan bukan relatif pemain), jadi berkas
+// tetap di tempatnya saat pemain bergerak dan tidak terpotong di batas chunk.
 float godRayFog(vec3 camW, vec3 ww, vec2 fc) {
+    float tm = ViewPositionAndTime.w;
     float jit = fract(dot(fc, vec2(0.06711056, 0.00583715)) * 52.9829189);
     float acc = 0.0;
     for (int i = 0; i < 6; i++) {
         float t = (float(i) + jit) / 6.0;
         vec3 sp = camW + ww * t;
-        vec2 q = vec2(dot(sp, RAY_T1), dot(sp, RAY_T2));
-        acc += smoothstep(0.40, 0.75, noiseWave(q * 0.6));
+        // bergeser pelan menyamping seiring waktu
+        vec2 q = vec2(dot(sp, RAY_T1) + tm * GODRAY_GESER, dot(sp, RAY_T2) + tm * GODRAY_GESER * 0.4);
+        float n = noiseWave(q * 0.6);
+        // tiap berkas berkedip dengan fase sendiri
+        float kedip = 1.0 - GODRAY_KEDIP + GODRAY_KEDIP * (0.5 + 0.5 * sin(tm * 1.4 + n * 12.0));
+        acc += smoothstep(0.40, 0.75, n) * kedip;
     }
     return acc / 6.0;
 }
@@ -651,11 +665,19 @@ void main() {
 #if defined(OPAQUE) || defined(ALPHA_TEST)
     //god rays (dipasang setelah fog supaya tidak tertelan fog jarak jauh)
     if (udw && wk > 0.05) {
-        float grJarak = saturate(lenWp / GODRAY_JARAK);
-        float grDens = godRayFog(ViewPositionAndTime.xyz, wp, gl_FragCoord.xy);
-        float grBawah = smoothstep(-0.7, -0.2, N.y);
-        float grA = grDens * grJarak * wk * mix(0.6, 1.0, uv1.y) * grBawah * GODRAY_POWER;
-        _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(grA));
+        // hilang di kejauhan (dan tidak muncul tepat di depan kamera)
+        float grJarak = smoothstep(1.0, GODRAY_DEKAT, lenWp) * (1.0 - smoothstep(GODRAY_JAUH_MIN, GODRAY_JAUH_MAX, lenWp));
+        // hilang di laut dalam (kedalaman kamera dari permukaan laut)
+        float grDalam = 1.0 - smoothstep(GODRAY_DALAM_MIN, GODRAY_DALAM_MAX, GODRAY_LAUT - ViewPositionAndTime.y);
+        // tidak ada di bawah block (cahaya langit di permukaan itu rendah)
+        float grAtap = smoothstep(0.45, 0.80, uv1.y);
+        float grGate = grJarak * grDalam * grAtap;
+        if (grGate > 0.001) {
+            float grDens = godRayFog(ViewPositionAndTime.xyz, wp, gl_FragCoord.xy);
+            float grBawah = smoothstep(-0.7, -0.2, N.y);
+            float grA = grDens * grGate * wk * grBawah * GODRAY_POWER;
+            _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(grA));
+        }
     }
 #endif
 
