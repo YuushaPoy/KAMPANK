@@ -46,6 +46,10 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define BAYANG_AWAN_KUAT 0.38
 #define BAYANG_AWAN_DITHER 0.02
 
+// ===== god rays bawah air =====
+#define GODRAY_POWER 0.8        // kekuatan berkas cahaya (0.0 = mati)
+#define GODRAY_JARAK 24.0       // jarak (blok) sampai berkas mencapai kekuatan penuh
+
 // ===== ACESFilm tonemap =====
 vec3 ACESFilm(vec3 x) {
     float a = 3.0;
@@ -189,17 +193,19 @@ float causticRay(vec3 pp, vec3 nn) {
     return c;
 }
 
-// fc = gl_FragCoord.xy, dikirim dari main (di HLSL gl_FragCoord tidak terlihat di dalam fungsi lain)
-float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
+// camW = posisi kamera di dunia, ww = vektor kamera -> piksel (wp), fc = gl_FragCoord.xy
+// (gl_FragCoord dikirim dari main karena di HLSL tidak terlihat di dalam fungsi lain)
+// berkas cahaya = noise yang konstan sepanjang arah sinar matahari, dijumlahkan sepanjang garis pandang
+float godRayFog(vec3 camW, vec3 ww, vec2 fc) {
     float jit = fract(dot(fc, vec2(0.06711056, 0.00583715)) * 52.9829189);
     float acc = 0.0;
-    for (int i = 0; i < 4; i++) {
-        float t = (float(i) + jit) * 0.25;
-        vec3 sp = pp - ww * (1.0 - t);
+    for (int i = 0; i < 6; i++) {
+        float t = (float(i) + jit) / 6.0;
+        vec3 sp = camW + ww * t;
         vec2 q = vec2(dot(sp, RAY_T1), dot(sp, RAY_T2));
-        acc += smoothstep(0.45, 0.8, noiseWave(q * 0.9));
+        acc += smoothstep(0.40, 0.75, noiseWave(q * 0.6));
     }
-    return acc * 0.25;
+    return acc / 6.0;
 }
 #endif // ALPHA_TEST || OPAQUE
 #endif // KODE_EXTRA
@@ -408,17 +414,6 @@ void main() {
         if (cmask > 0.001) {
             _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
         }
-
-        //god rays
-        if (wk > 0.05) {
-            float fog2 = smoothstep(1.0, 2.0, lenWp);
-            if (fog2 > 0.01) {
-                float dens = godRayFog(p, wp, gl_FragCoord.xy);
-                float bukanBawah = smoothstep(-0.7, -0.2, N.y);
-                float a = dens * fog2 * wk * uv1.y * 0.5 * bukanBawah;
-                _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(a));
-            }
-        }
     }
 
     //nether
@@ -527,17 +522,6 @@ void main() {
         float cmask = inWater * lit * (1.0 - saturate(lenKs / 20.0));
         if (cmask > 0.001) {
             _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
-        }
-
-        //god rays
-        if (wk > 0.05) {
-            float fog2 = smoothstep(1.0, 2.0, lenWp);
-            if (fog2 > 0.01) {
-                float dens = godRayFog(p, wp, gl_FragCoord.xy);
-                float bukanBawah = smoothstep(-0.7, -0.2, N.y);
-                float a = dens * fog2 * wk * uv1.y * 0.5 * bukanBawah;
-                _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(a));
-            }
         }
     }
 
@@ -662,6 +646,17 @@ void main() {
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / 20.0)), hujand);
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
+#endif
+
+#if defined(OPAQUE) || defined(ALPHA_TEST)
+    //god rays (dipasang setelah fog supaya tidak tertelan fog jarak jauh)
+    if (udw && wk > 0.05) {
+        float grJarak = saturate(lenWp / GODRAY_JARAK);
+        float grDens = godRayFog(ViewPositionAndTime.xyz, wp, gl_FragCoord.xy);
+        float grBawah = smoothstep(-0.7, -0.2, N.y);
+        float grA = grDens * grJarak * wk * mix(0.6, 1.0, uv1.y) * grBawah * GODRAY_POWER;
+        _finalColor.rgb = mix(_finalColor.rgb, vec3(0.5, 1.05, 1.2), saturate(grA));
+    }
 #endif
 
     diffuse = _finalColor;
