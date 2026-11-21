@@ -236,16 +236,17 @@ float hashAwan(vec2 q) {
 }
 
 // ===== bayangan awan (rumus sama dengan shader langit) =====
-float awanBayang(vec2 awBase) {
-    float awDh = hashAwan(awBase * 999.0);
+// fc = gl_FragCoord.xy (dikirim dari main); dither tepi awan pakai Bayer 8x8, bukan hash acak
+float awanBayang(vec2 awBase, vec2 fc) {
+    float awDh = bayer8(fc);
     return step(0.88, hashAwan(floor(awBase * 1.33 + awDh * BAYANG_AWAN_DITHER + ViewPositionAndTime.w * AWAN_SPEED)));
 }
 
 #if defined(ALPHA_TEST) || defined(OPAQUE)
 // ===== refleksi awan di logam (lantai dan dinding) =====
 // inti: 12 lapis awan dari koordinat awBase
-float awanLapis(vec2 awBase, float spd) {
-    float awDh = hashAwan(awBase * 999.0);
+float awanLapis(vec2 awBase, float spd, vec2 fc) {
+    float awDh = bayer8(fc);
     float awShd = 0.0;
     float awMm = 1.0;
     float awSc = 1.4;
@@ -260,14 +261,14 @@ float awanLapis(vec2 awBase, float spd) {
 
 // lantai: posisi awan dari jarak horizontal pantulan / tinggi awan TETAP,
 // jadi ukuran awan tidak berubah saat ketinggian kamera berubah. awH = pantulan xz (vektor kamera -> piksel)
-float awanRefMetal(vec2 awH, float spd) {
-    return awanLapis(vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI, spd);
+float awanRefMetal(vec2 awH, float spd, vec2 fc) {
+    return awanLapis(vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI, spd, fc);
 }
 
 // dinding: rumus awanRef persis dari RenderChunk (arah pantul awR satuan -> awR.xz / awR.y)
-float awanRef(vec3 awR, float spd) {
+float awanRef(vec3 awR, float spd, vec2 fc) {
     vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
-    return awanLapis(awBase, spd) * smoothstep(0.0, 0.12, awR.y);
+    return awanLapis(awBase, spd, fc) * smoothstep(0.0, 0.12, awR.y);
 }
 
 // ===== caustic (voronoi) =====
@@ -494,7 +495,7 @@ void main() {
         if (bAktif > 0.001) {
             // awan tepat di atas titik ini: base langit = xz / tinggi awan
             float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
-            float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI) * smoothstep(0.0, 0.12, bDy);
+            float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI, gl_FragCoord.xy) * smoothstep(0.0, 0.12, bDy);
             _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
         }
     }
@@ -520,7 +521,7 @@ void main() {
                 vec3 awRv = reflect(wp, N);
                 if (awRv.y > 0.0) {
                     float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
-                    float awMask = awanRefMetal(awRv.xz, 0.04) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
+                    float awMask = awanRefMetal(awRv.xz, 0.04, gl_FragCoord.xy) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
                     vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                     _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
                 }
@@ -544,7 +545,7 @@ void main() {
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
             vec3 awR = reflect(-V, N);
             if (awR.y > 0.0) {
-                float awMask = awanRef(awR, AWAN_SPEED_DINDING);
+                float awMask = awanRef(awR, AWAN_SPEED_DINDING, gl_FragCoord.xy);
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
             }
@@ -671,7 +672,7 @@ void main() {
         float bAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadowRaw);
         if (bAktif > 0.001) {
             float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
-            float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI) * smoothstep(0.0, 0.12, bDy);
+            float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI, gl_FragCoord.xy) * smoothstep(0.0, 0.12, bDy);
             _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
         }
     }
@@ -696,7 +697,7 @@ void main() {
                 vec3 awRv = reflect(wp, N);
                 if (awRv.y > 0.0) {
                     float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
-                    float awMask = awanRefMetal(awRv.xz, 0.04) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
+                    float awMask = awanRefMetal(awRv.xz, 0.04, gl_FragCoord.xy) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
                     vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                     _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
                 }
@@ -720,7 +721,7 @@ void main() {
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
             vec3 awR = reflect(-V, N);
             if (awR.y > 0.0) {
-                float awMask = awanRef(awR, AWAN_SPEED_DINDING);
+                float awMask = awanRef(awR, AWAN_SPEED_DINDING, gl_FragCoord.xy);
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
             }
@@ -797,7 +798,7 @@ void main() {
             if (bAktif > 0.001) {
                 // awan tepat di atas titik ini: base langit = xz / tinggi awan
                 float bDy = BAYANG_AWAN_TINGGI / sqrt(dot(wp.xz, wp.xz) + BAYANG_AWAN_TINGGI * BAYANG_AWAN_TINGGI);
-                float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI) * smoothstep(0.0, 0.12, bDy);
+                float bMask = awanBayang(wp.xz / BAYANG_AWAN_TINGGI, gl_FragCoord.xy) * smoothstep(0.0, 0.12, bDy);
                 _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 0.12), BAYANG_AWAN_KUAT * bMask * bAktif);
             }
         }
@@ -847,7 +848,7 @@ void main() {
             // jadi ukuran awan tidak berubah saat ketinggian kamera berubah, sama seperti bayangan awan di tanah
             float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
             vec2 awBase = vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI + wave * 0.05;
-            float awDh = hashAwan(awBase * 999.0);
+            float awDh = bayer8(gl_FragCoord.xy); // dither Bayer
             float awShd = 0.0;
             float awMm = 1.0;
             float awSc = 1.4;
