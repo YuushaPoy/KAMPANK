@@ -34,6 +34,10 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 // ===== metalic (alpha texture 250): hanya memantulkan warna langit, tanpa awan =====
 #define SISI_HALUS 0.15   // kehalusan peralihan warna atas/bawah di dinding sekitar tinggi mata
 
+// ===== gradasi biru air saat malam =====
+#define AIR_GRAD_MULAI 20.0   // jarak (blok) mulai bergradasi ke biru
+#define AIR_GRAD_PENUH 100.0  // jarak (blok) biru penuh (makin besar = biru makin jauh)
+
 // ===== glow (dibaca dari alpha texture: 252 = glow penuh, 253 = glow redup) =====
 #define GLOW_INTENSITY 0.85       // kekuatan glow (0.0 = mati)
 #define GLOW_SIANG 0.35           // glow siang hari sebagai fraksi dari glow di tempat gelap
@@ -650,7 +654,7 @@ void main() {
         _finalColor.rgb += vec3(0.3, 0.5, 0.7) * goa;
 
         //gradasi malam (warna sama dengan langit malam: abu gelap -> biru di sudut pandang miring/horizon)
-        float gradAir = clamp((1.0 - NdotV) * 1.6, 0.1, 1.0);
+        float gradAir = mix(0.1, 1.0, smoothstep(AIR_GRAD_MULAI, AIR_GRAD_PENUH, lenWp)); // makin jauh makin biru
         vec3 airMalam = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), gradAir);
         _finalColor.rgb += airMalam * malamd * (1.0 - hujand) * (1.0 - goa) * 0.6;
 
