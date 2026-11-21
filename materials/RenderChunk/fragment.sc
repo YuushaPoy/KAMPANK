@@ -31,6 +31,14 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define END_LIGHT_AMT  0.85
 #define END_DIM        0.55
 
+// ===== glow (dibaca dari alpha texture: 252 = glow penuh, 253 = glow redup) =====
+#define GLOW_INTENSITY 0.85       // kekuatan glow (0.0 = mati)
+#define GLOW_SIANG 0.35           // glow siang hari sebagai fraksi dari glow di tempat gelap
+#define GLOW_DENYUT 0.08          // denyut halus (0.0 = tidak berdenyut)
+#define GLOW_LANGIT_MIN 0.55      // cahaya langit (lightmap.y): glow penuh di bawah MIN, hilang di atas MAX
+#define GLOW_LANGIT_MAX 0.90
+#define GLOW_MALAM_TERBUKA 1.0    // 1.0 = malam hari glow tetap menyala di langit terbuka (0.0 = perilaku lama)
+
 // ===== bayangan awan (lantai dan sisi block) =====
 #define BAYANG_AWAN 1
 #define AWAN_SPEED 0.04
@@ -115,6 +123,27 @@ float noiseWave(vec2 x) {
     float d = hash12(i + vec2(1.0, 1.0));
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+// ===== glow =====
+// kode alpha texture -> kekuatan glow
+float oreGlowCode(float a) {
+    int c = int(a * 255.0 + 0.5);
+    return (c == 252) ? 1.0 : ((c == 253) ? 0.4 : 0.0);
+}
+
+// faktor kecerahan glow: jarak, naungan langit, siang/malam, denyut
+// skyL = lightmap.y, wkS = kecerahan langit (wk), malamS = malamd, lenK = jarak ke kamera
+float glowFactor(float lenK, float skyL, float wkS, float malamS) {
+    float fade = 1.0 - smoothstep(0.6, 1.0, lenK / FogAndDistanceControl.z);
+    // aturan lama: makin terbuka ke langit, glow makin hilang
+    float naungan = 1.0 - smoothstep(GLOW_LANGIT_MIN, GLOW_LANGIT_MAX, skyL);
+    // aturan baru: saat malam, langit terbuka tidak lagi meredam glow
+    float malamTerbuka = (1.0 - smoothstep(0.1, 0.4, wkS)) * GLOW_MALAM_TERBUKA;
+    naungan = max(naungan, malamTerbuka);
+    float terang = mix(GLOW_SIANG, 1.0, malamS) * naungan;
+    float pulse = 1.0 + GLOW_DENYUT * sin(ViewPositionAndTime.w * 1.5);
+    return terang * fade * pulse;
 }
 
 #if defined(ALPHA_TEST) || defined(OPAQUE)
@@ -401,6 +430,18 @@ void main() {
         _finalColor.rgb = fogn;
     }
 
+    //glow
+    {
+        vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
+        float oreGlow = oreGlowCode(oreTex.w);
+        if (v_ditheringAndMaskTinting.y > 0.5) {
+            oreGlow = 0.0;
+        }
+        if (oreGlow > 0.0) {
+            _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
+        }
+    }
+
     //end
     if (akhir) {
         vec3 ec = _finalColor.rgb * END_BRIGHT * endK;
@@ -500,6 +541,15 @@ void main() {
         }
     }
 
+    //glow
+    {
+        vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
+        float oreGlow = oreGlowCode(oreTex.w);
+        if (oreGlow > 0.0) {
+            _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
+        }
+    }
+
 #elif defined(TRANSPARENT)
     bool banyu = (kolor.b > kolor.g || kolor.b > kolor.r);
 
@@ -584,6 +634,18 @@ void main() {
             //transparansi air
             _finalColor.a = lenWp / 15.0 + wave * 0.05;
             _finalColor.a *= 1.5;
+        }
+    }
+
+    //glow
+    {
+        vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
+        float oreGlow = oreGlowCode(oreTex.w);
+        if (v_ditheringAndMaskTinting.y > 0.5) {
+            oreGlow = 0.0;
+        }
+        if (oreGlow > 0.0) {
+            _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
         }
     }
 #endif
