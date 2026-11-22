@@ -10,6 +10,10 @@ $output v_color0, v_texcoord0, v_worldPos
 //matahari diputar 45 derajat (belah ketupat), bulan tidak
 #define MATAHARI_PUTAR 1
 
+//arah terbit-tenggelam diputar mengelilingi sumbu vertikal (radian): 0.7853982 = 45 derajat
+//positif: terbit di pojok (+x, -z), tenggelam di pojok (-x, +z). Balik tandanya untuk arah sebaliknya, 0.0 = mati
+#define ORBIT_PUTAR 0.7853982
+
 void main() {
     vec3 lp = a_position;
 #if MATAHARI_PUTAR
@@ -27,6 +31,11 @@ void main() {
 #else
     worldPosition = mul(u_model[0], vec4(lp, 1.0)).xyz;
 #endif
+
+    //orbit
+    float oSin = sin(ORBIT_PUTAR);
+    float oCos = cos(ORBIT_PUTAR);
+    worldPosition.xz = vec2(oCos * worldPosition.x + oSin * worldPosition.z, -oSin * worldPosition.x + oCos * worldPosition.z);
 
     v_color0 = a_color0;
     v_texcoord0 = a_texcoord0;
