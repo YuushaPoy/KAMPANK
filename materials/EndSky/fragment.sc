@@ -2,48 +2,45 @@ $input v_color0, v_texcoord0, v_worldPos
 
 #include <bgfx_shader.sh>
 
-SAMPLER2D_AUTOREG(s_NoiseTexture); // textures/Noise/NoiseTexture.png (buffer: materials/EndSky/buffers/NoiseTexture.json)
+SAMPLER2D_AUTOREG(s_NoiseTexture);
 uniform vec4 SkyColor;
-uniform vec4 ViewPositionAndTime; // w = waktu (detik)
+uniform vec4 ViewPositionAndTime;
 
-// ---------- Tweak di sini ----------
-#define STAR_SCALE      80.0   // makin besar = bintang makin rapat/kecil
-#define STAR_DENSITY    0.90   // makin kecil = bintang makin banyak
-#define HORIZON_GLOW    0.85   // kuat semburat ungu di sisi
-#define AURORA_POWER    1.3    // kuat aurora di atas
+//Tweak
+#define STAR_SCALE      80.0
+#define STAR_DENSITY    0.90
+#define HORIZON_GLOW    0.85
+#define AURORA_POWER    1.3
 #define AURORA_SWIRL    2.2
 #define AURORA_PULL     1.2
 #define AURORA_RANGE    2.5
 #define AURORA_DRIFT    0.02
-// Black hole: devendrn (Simple blackhole), CC BY-SA 4.0 - dimodif: tepat di atas kepala, lebih kecil
-#define NL_BH_COL_LOW   vec3(0.45, 0.10, 1.00) // ungu
-#define NL_BH_COL_HIGH  vec3(2.40, 1.70, 3.00) // ungu muda keputihan
-#define NL_BH_DIST      3.0    // makin besar = black hole makin kecil
-#define NL_BH_SPEED     0.9    // kecepatan putaran black hole
-#define NL_BH_ARMS      2.5    // seberapa jelas lengan spiral yang berputar
-#define TWINKLE_SPEED   2.2    // kecepatan bintang berkelip
-#define TWINKLE_AMOUNT  0.45   // 0 = tidak kelip, 1 = kelip penuh
-#define NL_BH_GLOW      0.6    // kecerahan cincin
-// Posisi black hole: tinggi 50 derajat dari horizon, arah -x lalu bergeser 20 derajat ke -z
-// (E1 dan E2 = sumbu bidang singgung, harus ikut diganti kalau DIR diganti)
+// Black hole
+#define NL_BH_COL_LOW   vec3(0.45, 0.10, 1.00)
+#define NL_BH_COL_HIGH  vec3(2.40, 1.70, 3.00)
+#define NL_BH_DIST      3.0
+#define NL_BH_SPEED     0.9
+#define NL_BH_ARMS      2.5
+#define TWINKLE_SPEED   2.2
+#define TWINKLE_AMOUNT  0.45
+#define NL_BH_GLOW      0.6
 #define NL_BH_DIR       vec3(-0.6040, 0.7660, -0.2198)
 #define NL_BH_E1        vec3(-0.3420, 0.0, 0.9397)
 #define NL_BH_E2        vec3(0.7198, 0.6428, 0.2620)
-// -----------------------------------
 
-// ===== Awan Bicubic (port dari NL_SKY_CLOUDS), dilukis di kubah langit bawah =====
-#define NL_SKY_CLOUDS_NOISE_CELLS 16.0    // sel voronoi tekstur (jangan ubah kalau tekstur tidak dibuat ulang)
-#define NL_SKY_CLOUDS_LAYERS 7            // lapisan = volume & biaya (5 ringan ~ 9 berat). HP: 7
-#define NL_SKY_CLOUDS_LOD_Y 0.05          // oktaf makin sedikit dekat horizon (0.04 detail ~ 0.08 cepat)
-#define NL_SKY_CLOUDS_SCALE 0.34          // makin KECIL = awan makin BESAR (0.25 raksasa ~ 0.7 kecil)
-#define NL_SKY_CLOUDS_DENSITY 1.15        // makin kecil = awan makin RAPAT (0.9 penuh ~ 1.8 jarang)
-#define NL_SKY_CLOUDS_SPEED 1.0           // kecepatan angin
-#define NL_SKY_CLOUDS_LAYER_SQUEEZE 0.05  // jarak antar lapisan (volume)
-#define NL_SKY_CLOUDS_HORIZON_FADE 0.35   // awan memudar sampai ketinggian ini
-#define NL_SKY_CLOUDS_EDGE_LO 0.10        // batas bawah tepi awan (makin besar = awan makin sedikit)
-#define NL_SKY_CLOUDS_EDGE_HI 0.62        // batas atas tepi (makin dekat LO = tepi makin tegas)
-#define CLOUD_COL      vec3(0.45, 0.32, 0.72)  // warna awan (1 warna saja, tanpa gradasi)
-#define CLOUD_SKY_BASE vec3(0.13, 0.06, 0.26)  // warna dasar langit bawah, mengisi celah antar awan supaya tidak hitam
+//Awan Bicubic
+#define NL_SKY_CLOUDS_NOISE_CELLS 16.0
+#define NL_SKY_CLOUDS_LAYERS 7
+#define NL_SKY_CLOUDS_LOD_Y 0.05
+#define NL_SKY_CLOUDS_SCALE 0.34
+#define NL_SKY_CLOUDS_DENSITY 1.15
+#define NL_SKY_CLOUDS_SPEED 1.0
+#define NL_SKY_CLOUDS_LAYER_SQUEEZE 0.05
+#define NL_SKY_CLOUDS_HORIZON_FADE 0.35
+#define NL_SKY_CLOUDS_EDGE_LO 0.10
+#define NL_SKY_CLOUDS_EDGE_HI 0.62
+#define CLOUD_COL      vec3(0.45, 0.32, 0.72)
+#define CLOUD_SKY_BASE vec3(0.13, 0.06, 0.26)
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -77,9 +74,9 @@ float p8(float x) {
 vec4 renderBlackhole(vec3 vdir, float t) {
     t *= NL_BH_SPEED;
 
-    vec3 vd = vdir - NL_BH_DIR; // pusat black hole
+    vec3 vd = vdir - NL_BH_DIR;
     float nl = sin(15.0 * vd.x + t) * sin(15.0 * vd.y - t) * sin(15.0 * vd.z + t);
-    float a = atan2(dot(vd, NL_BH_E2) + 1e-6, dot(vd, NL_BH_E1)); // sudut di bidang singgung
+    float a = atan2(dot(vd, NL_BH_E2) + 1e-6, dot(vd, NL_BH_E1));
 
     float d = NL_BH_DIST * length(vd + 0.003 * nl);
     float d0 = (0.6 - d) / 0.6;
@@ -143,7 +140,7 @@ vec3 bsbeClouds(vec3 color, vec3 nPos, float fTime, vec3 cloudC, vec2 fragCoord)
         for (int i = 0; i < NL_SKY_CLOUDS_LAYERS; i++) {
             float m = bsbeFbm(cloudP, sDens, fTime, nOct);
             m = smoothstep(NL_SKY_CLOUDS_EDGE_LO, NL_SKY_CLOUDS_EDGE_HI, m);
-            color = mix(color, cloudC, m * fade); // semua lapisan 1 warna
+            color = mix(color, cloudC, m * fade);
             sDens = max(sDens - 0.06, 0.6);
             cloudP -= cloudP * NL_SKY_CLOUDS_LAYER_SQUEEZE;
         }
@@ -158,7 +155,6 @@ vec3 bhWarp(vec3 d, float t) {
     float cs = cos(ang);
     float sn = sin(ang);
     vec2 c = vec2(dot(vd, NL_BH_E1), dot(vd, NL_BH_E2));
-    // rotasi 2D (setara mat2(cs, -sn, sn, cs) * c, ditulis manual agar aman di semua platform)
     c = vec2(cs * c.x + sn * c.y, -sn * c.x + cs * c.y);
     c *= 1.0 + AURORA_PULL * k * (1.0 + 0.12 * sin(t * 0.7));
     return normalize(NL_BH_DIR + c.x * NL_BH_E1 + c.y * NL_BH_E2 + dot(vd, NL_BH_DIR) * NL_BH_DIR);
@@ -166,11 +162,11 @@ vec3 bhWarp(vec3 d, float t) {
 
 void main() {
     vec3 d = normalize(v_worldPos);
-    d.y = -d.y; // sumbu Y kubus langit kebalik, jadi dibalik di sini
+    d.y = -d.y;
     float time = ViewPositionAndTime.w;
     vec3 col = vec3(0.0, 0.0, 0.006);
 
-    // ---- Semburat ungu di sisi: glow + sinar vertikal ----
+    //Semburat ungu
     float g = 1.0 - abs(d.y);
     float g2 = g * g;
     float glow = g2 * g2;
@@ -182,9 +178,9 @@ void main() {
     col += gc * (glow * 0.55 + rays * 0.8) * HORIZON_GLOW;
     col += vec3(0.10, 0.02, 0.18) * g2 * 0.30;
 
-    // ---- Bintang (1 hash saja; sisanya diturunkan dari situ) ----
+    //Bintang
     vec3 p = d * STAR_SCALE;
-    float rad = clamp(length(fwidth(p)) * 0.75, 0.04, 0.25); // derivatif di luar branch
+    float rad = clamp(length(fwidth(p)) * 0.75, 0.04, 0.25);
     vec3 cell = floor(p);
     float r = hash13(cell);
     if (r >= STAR_DENSITY) {
@@ -196,11 +192,10 @@ void main() {
         col += starCol * star * bright * 1.6 * (1.0 - glow * 0.8);
     }
 
-    // ---- Aurora lembut di atas ----
+    //Aurora
     if (d.y > 0.05) {
         vec3 da = bhWarp(d, time);
         vec2 uv = da.xz / (max(da.y, 0.02) + 0.35);
-        // rotasi 2D (setara mat2(0.825, -0.565, 0.565, 0.825) * uv)
         uv = vec2(0.825 * uv.x + 0.565 * uv.y, -0.565 * uv.x + 0.825 * uv.y);
         uv.x += time * AURORA_DRIFT;
         float bk = exp(-length(d - NL_BH_DIR) * AURORA_RANGE);
@@ -213,20 +208,19 @@ void main() {
         col += ac * ribbon * (0.5 + 0.5 * streak) * elev * (AURORA_POWER * 0.8) * (1.0 + 0.8 * bk);
     }
 
-    // ---- Awan Bicubic di bawah (berlapis, bergerak pelan) ----
+    //Awan Bicubic di bawah
     if (d.y < 0.0) {
         col += CLOUD_SKY_BASE * smoothstep(0.0, 0.12, -d.y);
         col = bsbeClouds(col, vec3(d.x, -d.y, d.z), time, CLOUD_COL, gl_FragCoord.xy);
     }
 
-    // ---- Black hole di langit atas, miring ke -x (hanya dihitung di area kecil) ----
+    //Black hole
     if (dot(d, NL_BH_DIR) > 0.8) {
         vec4 bh = renderBlackhole(d, time);
-        col *= bh.a;                 // serap cahaya di tengah
-        col += bh.rgb * NL_BH_GLOW;  // cahaya cincin
+        col *= bh.a;
+        col += bh.rgb * NL_BH_GLOW;
     }
 
-    // Tonemap lembut (exp2 lebih murah dari exp) + dither kecil anti-banding
     col = vec3_splat(1.0) - exp2(-2.164 * col);
     col += vec3_splat((hash12(gl_FragCoord.xy) - 0.5) / 255.0);
 
