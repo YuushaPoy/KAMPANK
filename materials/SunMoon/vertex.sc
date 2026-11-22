@@ -7,11 +7,10 @@ $output v_color0, v_texcoord0, v_worldPos
 
 #include <bgfx_shader.sh>
 
-//matahari dan bulan diputar 45 derajat (belah ketupat)
+//matahari dan bulan diputar 45 derajat
 #define MATAHARI_PUTAR 1
 
-//arah terbit-tenggelam diputar mengelilingi sumbu vertikal (radian): 0.7853982 = 45 derajat
-//positif: terbit di pojok (+x, -z), tenggelam di pojok (-x, +z). Balik tandanya untuk arah sebaliknya, 0.0 = mati
+//orbit
 #define ORBIT_PUTAR 0.7853982
 
 void main() {
