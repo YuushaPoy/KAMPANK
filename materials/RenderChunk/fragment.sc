@@ -65,8 +65,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define AWAN_METAL_KUAT 1.0
 #define AWAN_SPEED_DINDING 0.04
 #define AWAN_AIR_KUAT 0.3
-//0.0 = persis seperti langit (awan makin kecil ke arah horizon), 1.0 = ukuran awan konstan di layar
-#define AWAN_REF_DATAR 0.7
+#define AWAN_AIR_TINGGI 10.0
 
 //god rays bawah air
 #define GODRAY_POWER 0.8
@@ -231,13 +230,13 @@ float awanLapis(vec2 awBase, float spd, vec2 fc) {
     return awShd;
 }
 
-vec2 awanBaseRef(vec3 awR) {
-    float yEf = mix(max(awR.y, 0.02), 1.0, AWAN_REF_DATAR);
-    return vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / yEf;
+float awanRefMetal(vec2 awH, float spd, vec2 fc) {
+    return awanLapis(vec2(AWAN_SX * awH.x, AWAN_SZ * awH.y) / AWAN_AIR_TINGGI, spd, fc);
 }
 
 float awanRef(vec3 awR, float spd, vec2 fc) {
-    return awanLapis(awanBaseRef(awR), spd, fc) * smoothstep(0.0, 0.12, awR.y);
+    vec2 awBase = vec2(AWAN_SX * awR.x, AWAN_SZ * awR.z) / max(awR.y, 0.02);
+    return awanLapis(awBase, spd, fc) * smoothstep(0.0, 0.12, awR.y);
 }
 
 //caustic
@@ -474,9 +473,13 @@ void main() {
 
             //awan ref
             if (!udw) {
-                float awMask = awanRef(reflect(-V, N), 0.04, gl_FragCoord.xy) * AWAN_METAL_KUAT;
-                vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
-                _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+                vec3 awRv = reflect(wp, N);
+                if (awRv.y > 0.0) {
+                    float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+                    float awMask = awanRefMetal(awRv.xz, 0.04, gl_FragCoord.xy) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
+                    vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                    _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+                }
             }
         }
 
@@ -645,9 +648,13 @@ void main() {
 
             //awan ref
             if (!udw) {
-                float awMask = awanRef(reflect(-V, N), 0.04, gl_FragCoord.xy) * AWAN_METAL_KUAT;
-                vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
-                _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+                vec3 awRv = reflect(wp, N);
+                if (awRv.y > 0.0) {
+                    float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+                    float awMask = awanRefMetal(awRv.xz, 0.04, gl_FragCoord.xy) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
+                    vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
+                    _finalColor.rgb = mix(_finalColor.rgb, awHasil, fr);
+                }
             }
         }
 
@@ -761,9 +768,10 @@ void main() {
 
             //awan ref (lantai, sama seperti air)
             if (!udw) {
-                float awShd = awanRef(reflect(-V, N), AWAN_SPEED, gl_FragCoord.xy);
+                float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+                float awShd = awanLapis(vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI, AWAN_SPEED, gl_FragCoord.xy);
                 float awSiang = smoothstep(0.2, 0.8, wk);
-                float awMask = awShd * AWAN_AIR_KUAT * (1.0 - shadow / 0.65) * (1.0 - hujand) * awSiang;
+                float awMask = awShd * smoothstep(0.0, 0.12, awDy) * AWAN_AIR_KUAT * (1.0 - shadow / 0.65) * (1.0 - hujand) * awSiang;
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
                 _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
             }
@@ -829,11 +837,20 @@ void main() {
 
         //refleksi awan di air
         if (N.y > 0.5 && !udw) {
-            vec3 awR = reflect(-V, N);
-            vec2 awBase = awanBaseRef(awR) + wave * 0.05;
-            float awShd = awanLapis(awBase, AWAN_SPEED, gl_FragCoord.xy);
+            float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
+            vec2 awBase = vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI + wave * 0.05;
+            float awDh = bayer8(gl_FragCoord.xy);
+            float awShd = 0.0;
+            float awMm = 1.0;
+            float awSc = 1.4;
+            for (int awI = 0; awI < 12; awI++) {
+                awSc /= 1.009;
+                awMm *= 0.96;
+                float awAwan = step(0.88, hashAwan(floor(awBase * awSc + awDh * 0.02 + tm * AWAN_SPEED)));
+                awShd = mix(awShd, awMm, awAwan);
+            }
             float awSiang = smoothstep(0.2, 0.8, wk);
-            float awMask = awShd * smoothstep(0.0, 0.12, awR.y) * AWAN_AIR_KUAT * (1.0 - shadowAir / 0.65) * (1.0 - hujand) * awSiang;
+            float awMask = awShd * smoothstep(0.0, 0.12, awDy) * AWAN_AIR_KUAT * (1.0 - shadowAir / 0.65) * (1.0 - hujand) * awSiang;
             vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
             _finalColor.rgb = mix(_finalColor.rgb, awHasil, fresnel(vec3_splat(0.4), NdotV));
         }
