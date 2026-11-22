@@ -7,7 +7,7 @@ $output v_color0, v_texcoord0, v_worldPos
 
 #include <bgfx_shader.sh>
 
-//matahari diputar 45 derajat (belah ketupat), bulan tidak
+//matahari dan bulan diputar 45 derajat (belah ketupat)
 #define MATAHARI_PUTAR 1
 
 //arah terbit-tenggelam diputar mengelilingi sumbu vertikal (radian): 0.7853982 = 45 derajat
@@ -17,11 +17,8 @@ $output v_color0, v_texcoord0, v_worldPos
 void main() {
     vec3 lp = a_position;
 #if MATAHARI_PUTAR
-    //matahari: y lokal > 0, bulan: y lokal < 0
-    if (lp.y > 0.0) {
-        float c = 0.70710678;
-        lp.xz = vec2((lp.x - lp.z) * c, (lp.x + lp.z) * c);
-    }
+    float c = 0.70710678;
+    lp.xz = vec2((lp.x - lp.z) * c, (lp.x + lp.z) * c);
 #endif
 
     vec3 worldPosition;
