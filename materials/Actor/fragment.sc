@@ -23,7 +23,7 @@ uniform vec4 FogControl;
 SAMPLER2D_AUTOREG(s_MatTexture);
 SAMPLER2D_AUTOREG(s_MatTexture1);
 
-//actor: coloring, tonemap, underwater, nether, haze
+//actor
 #define ACTOR_APA 0.6
 #define ACTOR_AO 1
 #define ACTOR_AO_MIN 0.55
