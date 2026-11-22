@@ -5,6 +5,7 @@ $input v_clipPosition, v_worldPosition, v_color0, v_ditheringAndMaskTinting, v_f
 
 uniform vec4 FogColor;
 uniform vec4 FogAndDistanceControl;
+uniform vec4 LightWorldSpaceDirection;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
@@ -142,6 +143,28 @@ float bayer8(vec2 a) {
 
 vec3 fresnel(vec3 f0, float NdotV) {
     return f0 + (1.0 - f0) * pow(1.0 - NdotV, 5.0);
+}
+
+//sun glow
+#define SUN_GLOW_KUAT 1.0
+#define ORBIT_PUTAR 0.7853982
+vec3 applySunGlow(vec3 rd, vec3 sunDir, vec3 skyColor, vec3 glowColor, float sunsetFactor, float rainFactor) {
+    float hl = length(rd.xz);
+    float sunHz = length(sunDir.xz);
+    vec2 sunDirNormXZ = sunHz > 1e-4 ? sunDir.xz / sunHz : vec2(1.0, 0.0);
+    float az = hl > 1e-4 ? dot(rd.xz / hl, sunDirNormXZ) : 0.0;
+    float sunAmt = max(dot(rd, sunDir), 0.0);
+    float sAmt = max(sunAmt, 1e-4);
+    float s2 = sAmt * sAmt;
+    float s4 = s2 * s2;
+    float s16 = s4 * s4;
+    float s64 = s16 * s16 * s16 * s16;
+    float azPos = max(az * 0.5 + 0.5, 1e-4);
+    float band = exp(-abs(rd.y) * 6.0) * pow(azPos, 1.5) * sunsetFactor * (1.0 - rainFactor);
+    float glowWeight = band * 0.40 + s4 * 0.18 + s16 * 0.32 + s64 * 0.45;
+    float horFade = smoothstep(-0.20, 0.05, rd.y);
+    float finalGlow = glowWeight * horFade;
+    return skyColor * (1.0 - clamp(glowWeight * 0.70, 0.0, 0.50) * horFade) + glowColor * finalGlow;
 }
 
 float genangan(vec2 q) {
@@ -919,6 +942,21 @@ void main() {
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenWp));
     }
 #endif
+
+    //sun glow
+    {
+        vec3 sunDir = -normalize(LightWorldSpaceDirection.xyz);
+        float oSin = sin(ORBIT_PUTAR);
+        float oCos = cos(ORBIT_PUTAR);
+        sunDir.xz = vec2(oCos * sunDir.x + oSin * sunDir.z, -oSin * sunDir.x + oCos * sunDir.z);
+        float sunsetFactor = clamp(1.0 - abs(sunDir.y) * 3.0, 0.0, 1.0);
+        vec3 glowColor = mix(vec3(1.0, 0.95, 0.85), vec3(1.0, 0.55, 0.20), sunsetFactor);
+        float glowAktif = smoothstep(0.05, 0.3, wk) * smoothstep(0.3, 0.9, uv1.y) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * SUN_GLOW_KUAT;
+        if (glowAktif > 0.001) {
+            vec3 glowHasil = applySunGlow(-V, sunDir, _finalColor.rgb, glowColor, sunsetFactor, hujand);
+            _finalColor.rgb = mix(_finalColor.rgb, glowHasil, glowAktif);
+        }
+    }
 
 #if defined(OPAQUE) || defined(ALPHA_TEST)
     //god rays
