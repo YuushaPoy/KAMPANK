@@ -766,7 +766,7 @@ void main() {
             _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenWp / 70.0)), fr), siangd * (1.0 - hujand));
             _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenWp / 70.0)), fr), sored * (1.0 - hujand));
 
-            //awan ref (lantai, sama seperti air)
+            //awan ref
             if (!udw) {
                 float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
                 float awShd = awanLapis(vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI, AWAN_SPEED, gl_FragCoord.xy);
@@ -789,7 +789,7 @@ void main() {
             vec3 soreBawah = vec3(1.0, 0.8, 0.1);
             _finalColor.rgb = mix(_finalColor.rgb, mix(soreBawah, soreAtas, awAtas), fr * sored * (1.0 - hujand));
 
-            //awan ref (dinding)
+            //awan ref
             if (wp.y > -0.05 && !udw) {
                 float awMask = awanRef(reflect(-V, N), AWAN_SPEED_DINDING, gl_FragCoord.xy);
                 _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, vec3_splat(1.0), awMask), fr);
