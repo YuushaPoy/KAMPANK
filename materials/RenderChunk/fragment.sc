@@ -148,7 +148,7 @@ vec3 fresnel(vec3 f0, float NdotV) {
 //sun glow
 #define SUN_GLOW_KUAT 1.0
 #define SUN_GLOW_DEBUG 0
-#define ORBIT_PUTAR 0.7853982
+#define SUN_GLOW_PUTAR 0.7853982
 vec3 applySunGlow(vec3 rd, vec3 sunDir, vec3 skyColor, vec3 glowColor, float sunsetFactor, float rainFactor) {
     float hl = length(rd.xz);
     float sunHz = length(sunDir.xz);
@@ -947,8 +947,8 @@ void main() {
     //sun glow
     {
         vec3 sunDir = -normalize(LightWorldSpaceDirection.xyz);
-        float oSin = sin(ORBIT_PUTAR);
-        float oCos = cos(ORBIT_PUTAR);
+        float oSin = sin(SUN_GLOW_PUTAR);
+        float oCos = cos(SUN_GLOW_PUTAR);
         sunDir.xz = vec2(oCos * sunDir.x + oSin * sunDir.z, -oSin * sunDir.x + oCos * sunDir.z);
 #if SUN_GLOW_DEBUG
         _finalColor.rgb = sunDir * 0.5 + 0.5;
