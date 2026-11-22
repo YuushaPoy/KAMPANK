@@ -14,10 +14,9 @@ uniform vec4 ViewPositionAndTime;
 uniform vec4 FogColor;
 uniform vec4 MeshContext;
 
-// intensitas fog bawaan AlphaTest dikali ini (fog tambahan ada di fragment, blok //fog)
 #define FOG_AMOUNT 0.3
 
-//bawah air (bukan nether, bukan End)
+//bawah air
 bool underwater() {
     vec4 f = FogColor;
     bool nether = (f.r > f.b && f.r < 0.5 && f.b < 0.2);
@@ -28,7 +27,7 @@ bool underwater() {
     return FogAndDistanceControl.x < 0.01 && !nether && !akhir && biru;
 }
 
-//gerakan vertex (offset dalam ruang dunia)
+//gerakan vertex
 vec3 gerak(vec3 lpos, vec4 col, float sky) {
     float t = ViewPositionAndTime.w;
     float ph = (lpos.x + lpos.y + lpos.z) * 1.1781;
@@ -38,7 +37,7 @@ vec3 gerak(vec3 lpos, vec4 col, float sky) {
 #if defined(ALPHA_TEST) || defined(DEPTH_ONLY_ALPHA_TEST)
     //daun dan rumput
     #if defined(SEASONS)
-    //SEASONS: a_color0 berisi data musim (bukan warna), jadi semua vertex AlphaTest SEASONS ikut bergerak
+    //SEASONS
     o.x += sin(t * 2.0 + ph) * 0.03;
     #else
     bool tinted = (col.r != col.g && col.g != col.b && frp.y != 0.015625);
