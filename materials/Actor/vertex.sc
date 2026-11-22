@@ -17,7 +17,7 @@ uniform vec4 FogControl;
 uniform vec4 UVAnimation;
 uniform mat4 Bones[8];
 
-//0 = fog bawaan Actor dimatikan, diganti haze di fragment
+//fog actor
 #define ACTOR_NATIVE_FOG 0
 
 void main() {
