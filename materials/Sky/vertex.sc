@@ -17,7 +17,6 @@ void main() {
     mat4 model = mtxFromCols(i_data1, i_data2, i_data3, vec4(0.0, 0.0, 0.0, 1.0));
     worldPosition = instMul(model, vec4(a_position, 1.0)).xyz;
 #else
-    // kubah langit dilengkungkan ke bawah makin jauh dari pusat
     vec4 hp = vec4(a_position, 1.0);
     hp.y -= length(hp.xz) * 0.3;
     worldPosition = mul(u_model[0], hp).xyz;
