@@ -30,6 +30,7 @@ jobs:
           call build.bat RenderChunk multiplatform
           call build.bat Sky multiplatform
           call build.bat Actor multiplatform
+          call build.bat SunMoon multiplatform
 
       - name: Upload Compiled Shaders
         uses: actions/upload-artifact@v4
