@@ -10,7 +10,7 @@ uniform vec4 FogAndDistanceControl;
 #define UDW_FOG_MAX   1.0
 #define UDW_FOG_START 5.0
 #define UDW_FOG_END   38.0
-#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)
+#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)*0.7
 #define UDW_TINT_JARAK 32.0
 
 //caustic underwater
