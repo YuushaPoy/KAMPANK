@@ -20,7 +20,6 @@ float bayer8(vec2 a) {
     return bayer4(0.5 * a) * 0.25 + bayer2(a);
 }
 
-#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)*0.7
 #define AWAN_BAYER 1
 #define AWAN_DITHER 0.02
 
@@ -78,13 +77,13 @@ void main() {
     float awanMask = shd * smoothstep(0.0, 0.12, d.y) * (1.0 - rS) * (1.0 - nS);
     diffuse.rgb = mix(diffuse.rgb, vec3_splat(1.0), awanMask);
 
-    //langit bawah air
+    //langit bawah air: samakan dengan warna fog underwater di RenderChunk
     float ungu = smoothstep(0.0, 0.012, min(fclr.r, fclr.b) - fclr.g);
     float gelap = 1.0 - smoothstep(0.05, 0.14, max(fclr.r, max(fclr.g, fclr.b)));
     float isAkhir = step(0.01, ungu * gelap);
     float isNether = step(fclr.b, fclr.r) * step(fclr.r, 0.4999) * step(fclr.b, 0.1999);
     float isUdw = step(FogAndDistanceControl.x, 0.00999) * (1.0 - isAkhir) * (1.0 - isNether);
-    diffuse.rgb = mix(diffuse.rgb, UDW_FOG_WARNA, isUdw);
+    diffuse.rgb = mix(diffuse.rgb, fclr.rgb * sqrt(0.8), isUdw);
 #endif
 
     gl_FragColor = diffuse;
