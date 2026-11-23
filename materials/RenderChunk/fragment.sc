@@ -13,6 +13,14 @@ uniform vec4 FogAndDistanceControl;
 float udwFog(float d) {
     return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
 }
+
+//falloff cahaya block (obor dll) lebih curam supaya cahaya tidak bocor jauh
+#define BLOCKLIGHT_CUT 0.2
+#define BLOCKLIGHT_POW 1.6
+float lightFalloff(float x) {
+    x = saturate((x - BLOCKLIGHT_CUT) / (1.0 - BLOCKLIGHT_CUT));
+    return pow(x, BLOCKLIGHT_POW);
+}
 uniform vec4 DitherParams;
 uniform vec4 DitherParams2[3];
 uniform vec4 ViewPositionAndTime;
@@ -357,6 +365,7 @@ void main() {
 #if defined(ALPHA_TEST) || (defined(OPAQUE) && !defined(SEASONS))
     float _endF = endFogAmt(v_fog);
     vec2 _lmUV = v_lightmapUV;
+    _lmUV.x = lightFalloff(_lmUV.x);
     _lmUV.x *= mix(1.0, END_BLOCKLIGHT, _endF);
     vec3 _lm = texture2D(s_LightMapTexture, _lmUV).rgb;
     if (_endF > 0.001) {
@@ -367,7 +376,9 @@ void main() {
     }
     diffuse.rgb *= _lm;
 #else
-    diffuse.rgb *= texture2D(s_LightMapTexture, v_lightmapUV).rgb;
+    vec2 _lmUV2 = v_lightmapUV;
+    _lmUV2.x = lightFalloff(_lmUV2.x);
+    diffuse.rgb *= texture2D(s_LightMapTexture, _lmUV2).rgb;
 #endif
     diffuse.rgb = mix(diffuse.rgb, FogColor.rgb, v_fog.a);
 
