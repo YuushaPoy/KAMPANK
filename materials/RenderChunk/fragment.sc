@@ -40,6 +40,9 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 //metalic
 #define SISI_HALUS 0.15
 
+//sisi block yang menghadap matahari saat fajar dan senja
+#define SUN_FACE_TERANG 0.25
+
 //gradasi biru air saat malam
 #define AIR_GRAD_MULAI 20.0
 #define AIR_GRAD_PENUH 100.0
@@ -415,11 +418,29 @@ void main() {
     float isudw = step(fctl.x, 0.00999) * (akhir ? 0.0 : 1.0);
     float isakhir = endF;
 
+    //deteksi fajar dan senja
+    //matahari diputar 45 derajat di SunMoon: fajar di (+x,-z), senja di (-x,+z)
+    float duskK = pow(max(min(1.0 - FogColor.b * 1.2, 1.0), 0.0), 0.5) * uv1.y;
+    float sunrise = duskK * FogColor.a * saturate(wp.x);
+    sunrise *= uv1.y;
+    float sunset = duskK * FogColor.a * saturate(-wp.x);
+    sunset *= uv1.y;
+    float twiGate = saturate(sored * 2.0) * (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
+    sunrise *= twiGate;
+    sunset *= twiGate;
+    float duskAmt = saturate(sunrise + sunset);
+    float sunSide = (sunrise - sunset) / max(sunrise + sunset, 0.0001);
+    //sisi yang menghadap matahari
+    float sunFace = saturate(sunSide * (N.x - N.z)) * duskAmt;
+
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
 
     //dirlight
     float dir = max(N.x, -N.z);
+    //fajar dan senja: dirlight di sisi berlawanan matahari
+    float dirDusk = max(-sunSide * N.x, sunSide * N.z);
+    dir = mix(dir, dirDusk, duskAmt);
     _finalColor.xyz *= mix(vec3_splat(0.75), vec3_splat(0.65), dir * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand) * (1.0 - malamd));
 
     //coloring, saturation and tonemapping
@@ -434,6 +455,9 @@ void main() {
             _finalColor.rgb *= 1.1;
         }
     }
+
+    //sisi menghadap matahari lebih terang
+    _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
 
     //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
@@ -603,9 +627,14 @@ void main() {
         _finalColor.xyz = Tm(_finalColor.xyz);
     }
 
+    //sisi menghadap matahari lebih terang
+    _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
+
     //dirlight
     if (!(kolor.g > kolor.r)) {
         float dir = max(N.x, -N.z);
+        float dirDusk = max(-sunSide * N.x, sunSide * N.z);
+        dir = mix(dir, dirDusk, duskAmt);
         _finalColor.xyz *= mix(vec3_splat(0.95), vec3_splat(0.558), dir * (1.0 - v_lightmapUV.x) * (1.0 - dirAlpha));
     }
     if (kolor.g > kolor.r) {
