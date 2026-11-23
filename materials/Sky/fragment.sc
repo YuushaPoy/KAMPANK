@@ -76,14 +76,6 @@ void main() {
     }
     float awanMask = shd * smoothstep(0.0, 0.12, d.y) * (1.0 - rS) * (1.0 - nS);
     diffuse.rgb = mix(diffuse.rgb, vec3_splat(1.0), awanMask);
-
-    //langit bawah air: samakan dengan warna fog underwater di RenderChunk
-    float ungu = smoothstep(0.0, 0.012, min(fclr.r, fclr.b) - fclr.g);
-    float gelap = 1.0 - smoothstep(0.05, 0.14, max(fclr.r, max(fclr.g, fclr.b)));
-    float isAkhir = step(0.01, ungu * gelap);
-    float isNether = step(fclr.b, fclr.r) * step(fclr.r, 0.4999) * step(fclr.b, 0.1999);
-    float isUdw = step(FogAndDistanceControl.x, 0.00999) * (1.0 - isAkhir) * (1.0 - isNether);
-    diffuse.rgb = mix(diffuse.rgb, fclr.rgb * sqrt(0.8), isUdw);
 #endif
 
     gl_FragColor = diffuse;
