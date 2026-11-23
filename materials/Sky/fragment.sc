@@ -20,7 +20,7 @@ float bayer8(vec2 a) {
     return bayer4(0.5 * a) * 0.25 + bayer2(a);
 }
 
-#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)
+#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)*0.7
 #define AWAN_BAYER 1
 #define AWAN_DITHER 0.02
 
