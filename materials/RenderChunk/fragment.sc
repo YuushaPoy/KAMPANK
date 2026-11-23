@@ -8,14 +8,8 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
-#define UDW_FOG_START 5.0
-#define UDW_FOG_END   38.0
-#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)*0.7
-#define UDW_TINT_JARAK 32.0
-
-//caustic underwater
-#define UDW_CAUSTIC_KUAT 1.0
-#define UDW_CAUSTIC_JARAK 45.0
+#define UDW_FOG_START 8.0
+#define UDW_FOG_END   45.0
 float udwFog(float d) {
     return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
 }
@@ -273,7 +267,7 @@ float vorolit(vec2 uv) {
 
 float causticRay(vec3 pp, vec3 nn) {
     vec2 q = vec2(dot(pp, RAY_T1), dot(pp, RAY_T2));
-    float c = smoothstep(0.3, 0.85, vorolit(q * 0.35));
+    float c = smoothstep(0.2, 1.0, vorolit(q * 0.35));
     c *= mix(0.6, 1.0, saturate(dot(nn, -RAY_D)));
     return c;
 }
@@ -570,7 +564,7 @@ void main() {
     //underwater
     if (udw && !(nether && akhir)) {
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
-        _finalColor = mix(_finalColor, vec4(UDW_FOG_WARNA, 1.0), Apa * saturate(lenKs / UDW_TINT_JARAK));
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 1.5, 1.4, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.5, 4.7);
         _finalColor.xyz *= ACESFilm(_finalColor.xyz);
 
@@ -580,9 +574,9 @@ void main() {
         float belowEye = 1.0 - smoothstep(0.7, 1.2, wp.y);
         float inWater = mix(1.0, belowEye, topBand);
         float lit = smoothstep(skyMax - 0.24, skyMax - 0.02, uv1.y);
-        float cmask = inWater * lit * (1.0 - saturate(lenKs / UDW_CAUSTIC_JARAK));
+        float cmask = inWater * lit * (1.0 - saturate(lenKs / 20.0));
         if (cmask > 0.001) {
-            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * UDW_CAUSTIC_KUAT * cmask;
+            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
         }
     }
 
@@ -735,7 +729,7 @@ void main() {
     //underwater
     if (udw) {
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
-        _finalColor = mix(_finalColor, vec4(UDW_FOG_WARNA, 1.0), Apa * saturate(lenKs / UDW_TINT_JARAK));
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
 
         //caustic
@@ -744,9 +738,9 @@ void main() {
         float belowEye = 1.0 - smoothstep(0.7, 1.2, wp.y);
         float inWater = mix(1.0, belowEye, topBand);
         float lit = smoothstep(skyMax - 0.24, skyMax - 0.02, uv1.y);
-        float cmask = inWater * lit * (1.0 - saturate(lenKs / UDW_CAUSTIC_JARAK));
+        float cmask = inWater * lit * (1.0 - saturate(lenKs / 20.0));
         if (cmask > 0.001) {
-            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * UDW_CAUSTIC_KUAT * cmask;
+            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
         }
     }
 
@@ -911,7 +905,7 @@ void main() {
         //underwater
         float uw = float(fctl.x == 0.0 && fctl.y < 0.8 && (FogColor.z > FogColor.x || FogColor.y > FogColor.x));
         if (uw > 0.5 && N.y < -0.5) {
-            _finalColor.rgb = mix(_finalColor.rgb, UDW_FOG_WARNA, 0.85);
+            _finalColor.rgb = mix(_finalColor.rgb, vec3(0.1, 0.45, 0.9), 0.85);
             _finalColor.rgb += fresnel(f0, NdotV) * 0.5 * (1.0 - malamd);
 
             //transparansi air
@@ -939,19 +933,19 @@ void main() {
         _finalColor = fgst;
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
         if (udw) {
-            _finalColor = mix(_finalColor, vec4(UDW_FOG_WARNA, 1.0), udwFog(lenKs));
+            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
         }
     }
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / 20.0)), hujand);
     if (udw) {
-        _finalColor = mix(_finalColor, vec4(UDW_FOG_WARNA, 1.0), udwFog(lenKs));
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
     }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
     if (udw) {
-        _finalColor = mix(_finalColor, vec4(UDW_FOG_WARNA, 1.0), udwFog(lenWp));
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenWp));
     }
 #endif
 
