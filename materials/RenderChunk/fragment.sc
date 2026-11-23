@@ -8,10 +8,10 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
-#define UDW_FOG_START 2.0
-#define UDW_FOG_END   22.0
-#define UDW_FOG_WARNA vec3(0.05, 0.75, 0.85)
-#define UDW_TINT_JARAK 20.0
+#define UDW_FOG_START 5.0
+#define UDW_FOG_END   38.0
+#define UDW_FOG_WARNA vec3(0.2, 1.0, 0.8)
+#define UDW_TINT_JARAK 32.0
 
 //caustic underwater
 #define UDW_CAUSTIC_KUAT 1.0
@@ -911,7 +911,7 @@ void main() {
         //underwater
         float uw = float(fctl.x == 0.0 && fctl.y < 0.8 && (FogColor.z > FogColor.x || FogColor.y > FogColor.x));
         if (uw > 0.5 && N.y < -0.5) {
-            _finalColor.rgb = mix(_finalColor.rgb, vec3(0.1, 0.45, 0.9), 0.85);
+            _finalColor.rgb = mix(_finalColor.rgb, UDW_FOG_WARNA, 0.85);
             _finalColor.rgb += fresnel(f0, NdotV) * 0.5 * (1.0 - malamd);
 
             //transparansi air
