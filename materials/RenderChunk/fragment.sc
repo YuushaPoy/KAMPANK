@@ -10,11 +10,17 @@ uniform vec4 FogAndDistanceControl;
 #define UDW_FOG_MAX   1.0
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
+//fog hujan
+#define FOG_HUJAN_JARAK 20.0
 float udwFog(float d) {
     return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
 }
 
-//falloff cahaya block (obor dll) lebih curam supaya cahaya tidak bocor jauh
+//arah cahaya block
+#define BL_ARAH_KUAT 0.5
+#define BL_ARAH_G 0.12
+
+//falloff cahaya block
 #define BLOCKLIGHT_CUT 0.2
 #define BLOCKLIGHT_POW 1.6
 float lightFalloff(float x) {
@@ -48,7 +54,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 //metalic
 #define SISI_HALUS 0.15
 
-//sisi block yang menghadap matahari saat fajar dan senja
+//fajar senja
 #define SUN_FACE_TERANG 0.25
 
 //gradasi biru air saat malam
@@ -430,7 +436,6 @@ void main() {
     float isakhir = endF;
 
     //deteksi fajar dan senja
-    //matahari diputar 45 derajat di SunMoon: fajar di (+x,-z), senja di (-x,+z)
     float duskK = pow(max(min(1.0 - FogColor.b * 1.2, 1.0), 0.0), 0.5) * uv1.y;
     float sunrise = duskK * FogColor.a * saturate(wp.x);
     sunrise *= uv1.y;
@@ -441,7 +446,6 @@ void main() {
     sunset *= twiGate;
     float duskAmt = saturate(sunrise + sunset);
     float sunSide = (sunrise - sunset) / max(sunrise + sunset, 0.0001);
-    //sisi yang menghadap matahari
     float sunFace = saturate(sunSide * (N.x - N.z)) * duskAmt;
 
 #if defined(OPAQUE)
@@ -449,7 +453,7 @@ void main() {
 
     //dirlight
     float dir = max(N.x, -N.z);
-    //fajar dan senja: dirlight di sisi berlawanan matahari
+    //dirlight fajar senja
     float dirDusk = max(-sunSide * N.x, sunSide * N.z);
     dir = mix(dir, dirDusk, duskAmt);
     _finalColor.xyz *= mix(vec3_splat(0.75), vec3_splat(0.65), dir * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand) * (1.0 - malamd));
@@ -467,8 +471,20 @@ void main() {
         }
     }
 
-    //sisi menghadap matahari lebih terang
+    //sisi matahari
     _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
+
+    //arah cahaya block
+    vec3 dpx = dFdx(p.xyz);
+    vec3 dpy = dFdy(p.xyz);
+    vec3 gr1 = cross(dpy, N);
+    vec3 gr2 = cross(N, dpx);
+    float gdet = dot(dpx, gr1);
+    float ginv = abs(gdet) > 0.000001 ? 1.0 / gdet : 0.0;
+    vec3 lgrad = (dFdx(uv1.x) * gr1 + dFdy(uv1.x) * gr2) * ginv;
+    float gm = saturate(length(lgrad) / BL_ARAH_G);
+    float blOnly = uv1.x * (1.0 - uv1.y);
+    _finalColor.rgb *= mix(1.0, sqrt(1.0 - gm * gm), BL_ARAH_KUAT * blOnly);
 
     //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
@@ -638,7 +654,7 @@ void main() {
         _finalColor.xyz = Tm(_finalColor.xyz);
     }
 
-    //sisi menghadap matahari lebih terang
+    //sisi matahari
     _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
 
     //dirlight
@@ -866,6 +882,12 @@ void main() {
         //wave air
         _finalColor.rgb += wave * 0.1 * vec3(0.3, 0.5, 1.0) * 0.7 * malamd;
         _finalColor.rgb += wave * 0.1 * vec3_splat(1.0) * 0.3 * hujand;
+
+        //warna air hujan
+        float rdY = normalize(wp).y;
+        float rGrad = clamp(sqrt(max(1.0 - rdY * rdY, 0.0)) * 1.6, 0.1, 1.0);
+        vec3 airHujan = mix(vec3_splat(0.45), vec3_splat(0.2), rGrad);
+        _finalColor.rgb = mix(_finalColor.rgb, airHujan + wave * 0.03, hujand * smoothstep(0.1, 0.4, wk) * (1.0 - isudw));
         //riak siang hari
         _finalColor.rgb += (wave - 0.42) * 0.5 * OMBAK_KUAT_SIANG * vec3(0.45, 0.7, 1.0) * siangd * (1.0 - hujand);
 
@@ -943,18 +965,20 @@ void main() {
         vec4 fgst = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(lenKs / 100.0)), (1.0 - hujand));
         _finalColor = fgst;
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
+        _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / FOG_HUJAN_JARAK)), hujand);
         if (udw) {
             _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
         }
     }
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
-    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / 20.0)), hujand);
+    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
     }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
+    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenWp));
     }
