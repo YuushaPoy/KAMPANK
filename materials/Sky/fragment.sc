@@ -20,9 +20,7 @@ float bayer8(vec2 a) {
     return bayer4(0.5 * a) * 0.25 + bayer2(a);
 }
 
-//samakan dengan UDW_FOG_WARNA di RenderChunk
-#define UDW_FOG_WARNA vec3(0.2, 1.0, 0.8)
-
+#define UDW_FOG_WARNA vec3(0.3,1.1,0.85)
 #define AWAN_BAYER 1
 #define AWAN_DITHER 0.02
 
