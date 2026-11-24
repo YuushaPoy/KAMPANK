@@ -43,7 +43,9 @@ void main() {
     //deteksi
     float fogSat = max(fclr.r, max(fclr.g, fclr.b)) - min(fclr.r, min(fclr.g, fclr.b));
     float fogLum = dot(fclr.rgb, vec3_splat(0.333));
-    float rainGray = (1.0 - smoothstep(0.05, 0.2, fogSat)) * smoothstep(0.15, 0.4, fogLum);
+    float skySat = max(v_color0.r, max(v_color0.g, v_color0.b)) - min(v_color0.r, min(v_color0.g, v_color0.b));
+    float skyGray = 1.0 - smoothstep(0.05, 0.2, skySat);
+    float rainGray = (1.0 - smoothstep(0.05, 0.2, fogSat)) * smoothstep(0.15, 0.4, fogLum) * skyGray;
     float nS = smoothstep(0.3, 0.6, night);
     float rS = smoothstep(0.1, 0.4, max(rain, rainGray)) * (1.0 - nS);
     float duS = smoothstep(0.2, 0.6, dusk) * (1.0 - rS) * (1.0 - nS);
