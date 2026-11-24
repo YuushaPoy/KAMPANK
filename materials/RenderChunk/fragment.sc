@@ -52,6 +52,9 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 
 //fajar senja
 #define SUN_FACE_TERANG 0.6
+#define SUN_FACE_GELAP 0.35
+#define SUN_FOGA 1.0
+#define SUN_DEBUG 0.0
 #define SUN_FACE_WARNA vec3(1.15, 0.95, 0.7)
 
 //gradasi biru air saat malam
@@ -447,16 +450,18 @@ void main() {
 
     //deteksi fajar dan senja
     float duskK = pow(max(min(1.0 - FogColor.b * 1.2, 1.0), 0.0), 0.5) * uv1.y;
-    float sunrise = duskK * FogColor.a * saturate(wp.x);
+    float fogA = mix(1.0, FogColor.a, SUN_FOGA);
+    float sunrise = duskK * fogA * saturate(wp.x);
     sunrise *= uv1.y;
-    float sunset = duskK * FogColor.a * saturate(-wp.x);
+    float sunset = duskK * fogA * saturate(-wp.x);
     sunset *= uv1.y;
-    float twiGate = saturate(sored * 3.0) * (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
+    float twiGate = smoothstep(0.0, 0.2, FogColor.r - FogColor.b) * (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
     sunrise *= twiGate;
     sunset *= twiGate;
     float duskAmt = saturate(sunrise + sunset);
     float sunSide = (sunrise - sunset) / max(sunrise + sunset, 0.0001);
-    float sunFace = saturate(sunSide * (N.x - N.z)) * duskAmt;
+    float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskAmt;
+    float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskAmt;
 
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
@@ -482,7 +487,9 @@ void main() {
     }
 
     //sisi matahari
-    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace);
+    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace) * (1.0 - SUN_FACE_GELAP * sunDark);
+    _finalColor.rgb = mix(_finalColor.rgb, vec3(1.0, 0.0, 0.0), sunFace * SUN_DEBUG);
+    _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 1.0), sunDark * SUN_DEBUG);
 
     //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
@@ -655,7 +662,9 @@ void main() {
     }
 
     //sisi matahari
-    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace);
+    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace) * (1.0 - SUN_FACE_GELAP * sunDark);
+    _finalColor.rgb = mix(_finalColor.rgb, vec3(1.0, 0.0, 0.0), sunFace * SUN_DEBUG);
+    _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 1.0), sunDark * SUN_DEBUG);
 
     //dirlight
     if (!(kolor.g > kolor.r)) {
