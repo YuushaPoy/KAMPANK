@@ -54,6 +54,7 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define SUN_TERANG vec3(1.3, 1.1, 0.8)
 #define SUN_GELAP vec3(0.7, 0.72, 0.85)
 #define SUN_GAIN 2.0
+#define SUN_ARAH 1.0
 #define SUN_FOGA 1.0
 #define SUN_DEBUG 0.0
 
@@ -451,9 +452,12 @@ void main() {
     //deteksi fajar dan senja
     float duskK = pow(max(min(1.0 - FogColor.b * 1.2, 1.0), 0.0), 0.5) * uv1.y;
     float fogA = mix(1.0, FogColor.a, SUN_FOGA);
-    float sunrise = duskK * fogA * saturate(wp.x);
+    bool sunManual = abs(SUN_ARAH) > 0.5;
+    float sideR = sunManual ? step(0.0, SUN_ARAH) : saturate(wp.x);
+    float sideS = sunManual ? 1.0 - sideR : saturate(-wp.x);
+    float sunrise = duskK * fogA * sideR;
     sunrise *= uv1.y;
-    float sunset = duskK * fogA * saturate(-wp.x);
+    float sunset = duskK * fogA * sideS;
     sunset *= uv1.y;
     float twiGate = (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
     sunrise *= twiGate;
