@@ -65,6 +65,8 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define GLOW_LANGIT_MAX 0.90
 #define GLOW_MALAM_TERBUKA 1.0
 #define GLOW_HALO 0.2
+#define GLOW_HALO2 0.1
+#define GLOW_HALO3 0.04
 #define GLOW_BLOOM_KUAT 1.6
 #define GLOW_BLOOM_MULAI 0.4
 #define GLOW_BLOOM_PUTIH 0.6
@@ -211,14 +213,17 @@ float oreGlowCode(float a) {
     if (c == 252) return 1.0;
     if (c == 253) return 0.4;
     if (c == 245) return GLOW_HALO;
+    if (c == 244) return GLOW_HALO2;
+    if (c == 243) return GLOW_HALO3;
     return 0.0;
 }
 
 //bloom
-vec3 glowBloom(vec3 g) {
-    g *= GLOW_BLOOM_KUAT;
+vec3 glowBloom(vec3 g, float k) {
+    float on = step(0.3, k);
+    g *= mix(1.0, GLOW_BLOOM_KUAT, on);
     float l = dot(g, vec3(0.299, 0.587, 0.114));
-    float w = smoothstep(GLOW_BLOOM_MULAI, 1.0, l) * GLOW_BLOOM_PUTIH;
+    float w = smoothstep(GLOW_BLOOM_MULAI, 1.0, l) * GLOW_BLOOM_PUTIH * on;
     return mix(g, vec3_splat(l * 1.15), w);
 }
 
@@ -622,7 +627,7 @@ void main() {
             oreGlow = 0.0;
         }
         if (oreGlow > 0.0) {
-            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd));
+            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd), oreGlow);
         }
     }
 
@@ -774,7 +779,7 @@ void main() {
     {
         float oreGlow = oreGlowCode(oreTex.w);
         if (oreGlow > 0.0) {
-            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd));
+            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd), oreGlow);
         }
     }
 
@@ -953,7 +958,7 @@ void main() {
             oreGlow = 0.0;
         }
         if (oreGlow > 0.0) {
-            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd));
+            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd), oreGlow);
         }
     }
 #endif
