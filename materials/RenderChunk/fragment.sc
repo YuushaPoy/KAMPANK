@@ -11,13 +11,17 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
 #define SNELL_GOYANG 0.1
-#define SNELL_TERANG 0.6
-#define SNELL_BUKA 0.95
+#define SNELL_INDEKS 1.333
+#define SNELL_LANGIT 1.0
 #define SNELL_TIR vec3(0.02, 0.12, 0.22)
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
 //fog hujan
 #define FOG_HUJAN_JARAK 20.0
+float hashLangit(vec2 q) {
+    return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453);
+}
+
 float udwFog(float d) {
     return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
 }
@@ -973,13 +977,42 @@ void main() {
 
             //snell window
             float snellDay = smoothstep(0.05, 0.4, wk);
-            float snellCos = normalize(wp).y + wave * SNELL_GOYANG;
+            vec3 snellV = normalize(wp);
+            float snellCos = snellV.y + wave * SNELL_GOYANG;
             float snellWin = smoothstep(SNELL_SUDUT - SNELL_LEMBUT, SNELL_SUDUT + SNELL_LEMBUT, snellCos);
             float snellRim = smoothstep(SNELL_LEMBUT * 3.0, 0.0, abs(snellCos - SNELL_SUDUT));
-            vec3 snellJendela = _finalColor.rgb * (1.0 + SNELL_TERANG * snellDay);
+
+            //langit jendela
+            float sinW = sqrt(max(1.0 - saturate(snellCos) * saturate(snellCos), 0.0));
+            float sinA = min(sinW * SNELL_INDEKS, 1.0);
+            float cosA = sqrt(max(1.0 - sinA * sinA, 0.0));
+            vec2 hdir = normalize(snellV.xz + vec2(0.0001, 0.0001));
+            vec3 dA = vec3(hdir.x * sinA, cosA, hdir.y * sinA);
+            float sGrad = clamp(sinA * 1.6, 0.1, 1.0);
+            vec3 cPagiS = mix(vec3(0.1, 0.5, 1.0) * 0.7, vec3_splat(1.0), sGrad);
+            vec3 cSoreS = mix(vec3(0.1, 0.5, 1.0) * 0.2, vec3(1.0, 0.8, 0.1), sGrad);
+            vec3 cMalamS = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), sGrad);
+            float sDay = smoothstep(0.15, 0.7, wk);
+            vec3 langitS = mix(cMalamS, cPagiS, sDay);
+            langitS = mix(langitS, cSoreS, saturate(sored * 2.0) * 0.7);
+
+            //awan jendela
+            vec2 cBase = dA.xz / max(dA.y, 0.02);
+            float cShd = 0.0;
+            float cMm = 1.0;
+            float cSc = 1.4;
+            for (int i = 0; i < 12; i++) {
+                cSc /= 1.009;
+                cMm *= 0.96;
+                float cAw = step(0.88, hashLangit(floor(cBase * cSc + vec2_splat(tm * 0.04))));
+                cShd = mix(cShd, cMm, cAw);
+            }
+            float cMask = cShd * smoothstep(0.0, 0.12, dA.y) * sDay;
+            langitS = mix(langitS, vec3_splat(1.0), cMask) * SNELL_LANGIT;
+
             vec3 snellTir = SNELL_TIR * (0.3 + 0.7 * snellDay);
-            _finalColor.rgb = mix(snellTir, snellJendela, snellWin) + vec3(0.2, 0.45, 0.6) * snellRim * 0.4 * snellDay;
-            _finalColor.a = mix(0.95, _finalColor.a * (1.0 - SNELL_BUKA), snellWin);
+            _finalColor.rgb = mix(snellTir, langitS, snellWin) + vec3(0.2, 0.45, 0.6) * snellRim * 0.4 * snellDay;
+            _finalColor.a = mix(0.95, 1.0, snellWin);
         }
     }
 
