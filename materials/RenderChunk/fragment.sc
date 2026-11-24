@@ -460,7 +460,7 @@ void main() {
 
     //coloring, saturation and tonemapping
     if (!akhir) {
-        _finalColor.rgb *= vec3_splat(1.7);
+        _finalColor.rgb *= vec3_splat(1.8);
         _finalColor.rgb = saturation(_finalColor.rgb, 1.2);
         if (!(udw)) {
             _finalColor.xyz *= ACESFilm(_finalColor.xyz);
