@@ -16,10 +16,6 @@ float udwFog(float d) {
     return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
 }
 
-//arah cahaya block
-#define BL_ARAH_KUAT 0.5
-#define BL_ARAH_G 0.12
-
 //falloff cahaya block
 #define BLOCKLIGHT_CUT 0.2
 #define BLOCKLIGHT_POW 1.6
@@ -460,7 +456,7 @@ void main() {
 
     //coloring, saturation and tonemapping
     if (!akhir) {
-        _finalColor.rgb *= vec3_splat(1.8);
+        _finalColor.rgb *= vec3_splat(1.7);
         _finalColor.rgb = saturation(_finalColor.rgb, 1.2);
         if (!(udw)) {
             _finalColor.xyz *= ACESFilm(_finalColor.xyz);
@@ -473,18 +469,6 @@ void main() {
 
     //sisi matahari
     _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
-
-    //arah cahaya block
-    vec3 dpx = dFdx(p.xyz);
-    vec3 dpy = dFdy(p.xyz);
-    vec3 gr1 = cross(dpy, N);
-    vec3 gr2 = cross(N, dpx);
-    float gdet = dot(dpx, gr1);
-    float ginv = abs(gdet) > 0.000001 ? 1.0 / gdet : 0.0;
-    vec3 lgrad = (dFdx(uv1.x) * gr1 + dFdy(uv1.x) * gr2) * ginv;
-    float gm = saturate(length(lgrad) / BL_ARAH_G);
-    float blOnly = uv1.x * (1.0 - uv1.y);
-    _finalColor.rgb *= mix(1.0, sqrt(1.0 - gm * gm), BL_ARAH_KUAT * blOnly);
 
     //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
