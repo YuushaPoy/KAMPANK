@@ -16,6 +16,10 @@ float udwFog(float d) {
     return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
 }
 
+//warna cahaya
+#define WARNA_CAHAYA vec3(1.2, 0.95, 0.7)
+#define WARNA_CAHAYA_KUAT 0.8
+
 //falloff cahaya block
 #define BLOCKLIGHT_CUT 0.2
 #define BLOCKLIGHT_POW 1.6
@@ -23,6 +27,12 @@ float lightFalloff(float x) {
     x = saturate((x - BLOCKLIGHT_CUT) / (1.0 - BLOCKLIGHT_CUT));
     return pow(x, BLOCKLIGHT_POW);
 }
+
+vec3 warnaCahaya(vec3 c, float lx, float ly, float nether) {
+    float w = lightFalloff(lx) * (1.0 - smoothstep(0.4, 0.9, ly)) * (1.0 - nether);
+    return c * mix(vec3_splat(1.0), WARNA_CAHAYA, w * WARNA_CAHAYA_KUAT);
+}
+
 uniform vec4 DitherParams;
 uniform vec4 DitherParams2[3];
 uniform vec4 ViewPositionAndTime;
@@ -581,6 +591,11 @@ void main() {
         _finalColor.rgb += vec3(1.0, 0.55, 0.2) * glow * 0.6 * (1.0 - saturate(_finalColor.rgb));
     }
 
+    //warna cahaya
+    if (!(akhir) && !(udw)) {
+        _finalColor.rgb = warnaCahaya(_finalColor.rgb, uv1.x, uv1.y, isnether);
+    }
+
     float endK = (fctl.x < 0.01) ? END_DIM : 1.0;
 
     //underwater
@@ -651,6 +666,11 @@ void main() {
 
     //sisi matahari
     _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
+
+    //warna cahaya
+    if (!(akhir) && !(udw)) {
+        _finalColor.rgb = warnaCahaya(_finalColor.rgb, uv1.x, uv1.y, isnether);
+    }
 
     //dirlight
     if (!(kolor.g > kolor.r)) {
