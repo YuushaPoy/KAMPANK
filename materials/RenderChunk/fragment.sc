@@ -51,11 +51,11 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define SISI_HALUS 0.15
 
 //fajar senja
-#define SUN_FACE_TERANG 0.6
-#define SUN_FACE_GELAP 0.35
+#define SUN_TERANG vec3(1.3, 1.1, 0.8)
+#define SUN_GELAP vec3(0.7, 0.72, 0.85)
+#define SUN_GAIN 2.0
 #define SUN_FOGA 1.0
 #define SUN_DEBUG 0.0
-#define SUN_FACE_WARNA vec3(1.15, 0.95, 0.7)
 
 //gradasi biru air saat malam
 #define AIR_GRAD_MULAI 20.0
@@ -455,23 +455,28 @@ void main() {
     sunrise *= uv1.y;
     float sunset = duskK * fogA * saturate(-wp.x);
     sunset *= uv1.y;
-    float twiGate = smoothstep(0.0, 0.2, FogColor.r - FogColor.b) * (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
+    float twiGate = (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
     sunrise *= twiGate;
     sunset *= twiGate;
     float duskAmt = saturate(sunrise + sunset);
+    float duskW = saturate(duskAmt * SUN_GAIN);
     float sunSide = (sunrise - sunset) / max(sunrise + sunset, 0.0001);
-    float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskAmt;
-    float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskAmt;
+    float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskW;
+    float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskW;
 
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
 
     //dirlight
     float dir = max(N.x, -N.z);
+    _finalColor.xyz *= mix(vec3_splat(0.75), vec3_splat(0.65), dir * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand) * (1.0 - malamd) * (1.0 - duskW));
+
     //dirlight fajar senja
-    float dirDusk = max(-sunSide * N.x, sunSide * N.z);
-    dir = mix(dir, dirDusk, duskAmt);
-    _finalColor.xyz *= mix(vec3_splat(0.75), vec3_splat(0.65), dir * (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand) * (1.0 - malamd));
+    float dusG = (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SUN_TERANG, sunFace * dusG);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SUN_GELAP, sunDark * dusG);
+    _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * SUN_DEBUG);
+    _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * SUN_DEBUG);
 
     //coloring, saturation and tonemapping
     if (!akhir) {
@@ -485,11 +490,6 @@ void main() {
             _finalColor.rgb *= 1.1;
         }
     }
-
-    //sisi matahari
-    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace) * (1.0 - SUN_FACE_GELAP * sunDark);
-    _finalColor.rgb = mix(_finalColor.rgb, vec3(1.0, 0.0, 0.0), sunFace * SUN_DEBUG);
-    _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 1.0), sunDark * SUN_DEBUG);
 
     //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
@@ -661,18 +661,18 @@ void main() {
         _finalColor.xyz = Tm(_finalColor.xyz);
     }
 
-    //sisi matahari
-    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace) * (1.0 - SUN_FACE_GELAP * sunDark);
-    _finalColor.rgb = mix(_finalColor.rgb, vec3(1.0, 0.0, 0.0), sunFace * SUN_DEBUG);
-    _finalColor.rgb = mix(_finalColor.rgb, vec3(0.0, 0.0, 1.0), sunDark * SUN_DEBUG);
-
     //dirlight
     if (!(kolor.g > kolor.r)) {
         float dir = max(N.x, -N.z);
-        float dirDusk = max(-sunSide * N.x, sunSide * N.z);
-        dir = mix(dir, dirDusk, duskAmt);
-        _finalColor.xyz *= mix(vec3_splat(0.95), vec3_splat(0.558), dir * (1.0 - v_lightmapUV.x) * (1.0 - dirAlpha));
+        _finalColor.xyz *= mix(vec3_splat(0.95), vec3_splat(0.558), dir * (1.0 - v_lightmapUV.x) * (1.0 - dirAlpha) * (1.0 - duskW));
     }
+
+    //dirlight fajar senja
+    float dusG = (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SUN_TERANG, sunFace * dusG);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SUN_GELAP, sunDark * dusG);
+    _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * SUN_DEBUG);
+    _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * SUN_DEBUG);
     if (kolor.g > kolor.r) {
         _finalColor.rgb = mix(_finalColor.rgb, _finalColor.rgb * 0.55, dirAlpha * (1.0 - v_lightmapUV.x));
     }
