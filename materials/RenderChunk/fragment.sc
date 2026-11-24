@@ -51,7 +51,8 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define SISI_HALUS 0.15
 
 //fajar senja
-#define SUN_FACE_TERANG 0.25
+#define SUN_FACE_TERANG 0.6
+#define SUN_FACE_WARNA vec3(1.15, 0.95, 0.7)
 
 //gradasi biru air saat malam
 #define AIR_GRAD_MULAI 20.0
@@ -450,7 +451,7 @@ void main() {
     sunrise *= uv1.y;
     float sunset = duskK * FogColor.a * saturate(-wp.x);
     sunset *= uv1.y;
-    float twiGate = saturate(sored * 2.0) * (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
+    float twiGate = saturate(sored * 3.0) * (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
     sunrise *= twiGate;
     sunset *= twiGate;
     float duskAmt = saturate(sunrise + sunset);
@@ -481,7 +482,7 @@ void main() {
     }
 
     //sisi matahari
-    _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
+    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace);
 
     //shadow
     float shadowRaw = smoothstep(1.0, 0.95, uv1.y);
@@ -654,7 +655,7 @@ void main() {
     }
 
     //sisi matahari
-    _finalColor.rgb *= 1.0 + SUN_FACE_TERANG * sunFace;
+    _finalColor.rgb *= mix(vec3_splat(1.0), SUN_FACE_WARNA, sunFace) * (1.0 + SUN_FACE_TERANG * sunFace);
 
     //dirlight
     if (!(kolor.g > kolor.r)) {
