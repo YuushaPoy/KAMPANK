@@ -8,6 +8,12 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
+#define SNELL_SUDUT 0.661
+#define SNELL_LEMBUT 0.03
+#define SNELL_GOYANG 0.1
+#define SNELL_TERANG 0.6
+#define SNELL_BUKA 0.7
+#define SNELL_TIR vec3(0.02, 0.12, 0.22)
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
 //fog hujan
@@ -964,6 +970,16 @@ void main() {
             //transparansi air
             _finalColor.a = lenWp / 15.0 + wave * 0.05;
             _finalColor.a *= 1.5;
+
+            //snell window
+            float snellDay = smoothstep(0.05, 0.4, wk);
+            float snellCos = normalize(wp).y + wave * SNELL_GOYANG;
+            float snellWin = smoothstep(SNELL_SUDUT - SNELL_LEMBUT, SNELL_SUDUT + SNELL_LEMBUT, snellCos);
+            float snellRim = smoothstep(SNELL_LEMBUT * 3.0, 0.0, abs(snellCos - SNELL_SUDUT));
+            vec3 snellJendela = _finalColor.rgb * (1.0 + SNELL_TERANG * snellDay);
+            vec3 snellTir = SNELL_TIR * (0.3 + 0.7 * snellDay);
+            _finalColor.rgb = mix(snellTir, snellJendela, snellWin) + vec3(0.2, 0.45, 0.6) * snellRim * 0.4 * snellDay;
+            _finalColor.a = mix(0.95, _finalColor.a * (1.0 - SNELL_BUKA), snellWin);
         }
     }
 
