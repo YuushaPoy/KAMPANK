@@ -64,6 +64,9 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define GLOW_LANGIT_MIN 0.55
 #define GLOW_LANGIT_MAX 0.90
 #define GLOW_MALAM_TERBUKA 1.0
+#define GLOW_BLOOM_KUAT 1.6
+#define GLOW_BLOOM_MULAI 0.4
+#define GLOW_BLOOM_PUTIH 0.6
 
 //bayangan awan
 #define BAYANG_AWAN 1
@@ -205,6 +208,14 @@ float ombakAir(vec2 pxz, float tm) {
 float oreGlowCode(float a) {
     int c = int(a * 255.0 + 0.5);
     return (c == 252) ? 1.0 : ((c == 253) ? 0.4 : 0.0);
+}
+
+//bloom
+vec3 glowBloom(vec3 g) {
+    g *= GLOW_BLOOM_KUAT;
+    float l = dot(g, vec3(0.299, 0.587, 0.114));
+    float w = smoothstep(GLOW_BLOOM_MULAI, 1.0, l) * GLOW_BLOOM_PUTIH;
+    return mix(g, vec3_splat(l * 1.15), w);
 }
 
 float glowFactor(float lenK, float skyL, float wkS, float malamS) {
@@ -607,7 +618,7 @@ void main() {
             oreGlow = 0.0;
         }
         if (oreGlow > 0.0) {
-            _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
+            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd));
         }
     }
 
@@ -759,7 +770,7 @@ void main() {
     {
         float oreGlow = oreGlowCode(oreTex.w);
         if (oreGlow > 0.0) {
-            _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
+            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd));
         }
     }
 
@@ -938,7 +949,7 @@ void main() {
             oreGlow = 0.0;
         }
         if (oreGlow > 0.0) {
-            _finalColor.rgb += oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd);
+            _finalColor.rgb += glowBloom(oreTex.rgb * oreGlow * GLOW_INTENSITY * glowFactor(lenKs, uv1.y, wk, malamd));
         }
     }
 #endif
