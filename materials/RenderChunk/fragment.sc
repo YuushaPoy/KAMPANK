@@ -12,7 +12,7 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_LEMBUT 0.03
 #define SNELL_GOYANG 0.1
 #define SNELL_TERANG 0.6
-#define SNELL_BUKA 0.7
+#define SNELL_BUKA 0.95
 #define SNELL_TIR vec3(0.02, 0.12, 0.22)
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
@@ -1018,7 +1018,7 @@ void main() {
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenWp));
+        _finalColor.rgb = mix(_finalColor.rgb, v_fog.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp));
     }
 #endif
 
