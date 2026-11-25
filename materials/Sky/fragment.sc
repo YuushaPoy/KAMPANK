@@ -20,6 +20,10 @@ float bayer8(vec2 a) {
     return bayer4(0.5 * a) * 0.25 + bayer2(a);
 }
 
+#define UDW_WARNA vec3(0.02, 0.3, 0.5)
+#define UDW_SCATTER 6.0
+#define UDW_TERANG 2.0
+
 #define AWAN_BAYER 1
 #define AWAN_DITHER 0.02
 
@@ -78,6 +82,19 @@ void main() {
     }
     float awanMask = shd * smoothstep(0.0, 0.12, d.y) * (1.0 - rS) * (1.0 - nS);
     diffuse.rgb = mix(diffuse.rgb, vec3_splat(1.0), awanMask);
+
+    //underwater
+    bool nether = (fclr.r > fclr.b && fclr.r < 0.5 && fclr.b < 0.2);
+    bool udw = (FogAndDistanceControl.x < 0.01) && (fclr.b > fclr.r * 1.5) && (fclr.r < 0.35);
+    if (!(nether)) {
+        if (udw) {
+            float udwDay = smoothstep(0.03, 0.25, dot(fclr.rgb, vec3_splat(0.333)));
+            float udwHg = 0.64 / (12.566 * pow(max(1.36 - 1.2 * d.y, 0.01), 1.5));
+            vec3 udwFogCol = UDW_WARNA * (0.05 + udwDay * 0.2) * UDW_TERANG;
+            udwFogCol *= 1.0 + UDW_SCATTER * udwHg * udwDay;
+            diffuse.rgb = udwFogCol;
+        }
+    }
 #endif
 
     gl_FragColor = diffuse;
