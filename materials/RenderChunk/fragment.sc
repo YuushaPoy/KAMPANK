@@ -14,6 +14,10 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_INDEKS 1.333
 #define SNELL_LANGIT 1.0
 #define SNELL_PUTIH 0.3
+#define SNELL_PUSAT 2.0
+#define SNELL_BINTANG_SKALA 40.0
+#define SNELL_BINTANG_DENSITAS 0.04
+#define SNELL_BINTANG_TERANG 1.0
 #define SNELL_GELAP 0.5
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
@@ -1005,7 +1009,7 @@ void main() {
             float cosA = sqrt(max(1.0 - sinA * sinA, 0.0));
             vec2 hdir = normalize(snellV.xz + vec2(0.0001, 0.0001));
             vec3 dA = vec3(hdir.x * sinA, cosA, hdir.y * sinA);
-            float sGrad = clamp(sinA * 1.6, 0.1, 1.0);
+            float sGrad = clamp(pow(sinA, SNELL_PUSAT) * 1.6, 0.1, 1.0);
             vec3 cPagiS = mix(vec3(0.1, 0.5, 1.0) * 0.7, mix(vec3(0.1, 0.5, 1.0) * 0.7, vec3_splat(1.0), SNELL_PUTIH), sGrad);
             vec3 cSoreS = mix(vec3(0.1, 0.5, 1.0) * 0.2, vec3(1.0, 0.8, 0.1), sGrad);
             vec3 cMalamS = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), sGrad);
@@ -1026,6 +1030,15 @@ void main() {
             }
             float cMask = cShd * smoothstep(0.0, 0.12, dA.y) * sDay;
             langitS = mix(langitS, vec3_splat(1.0), cMask) * SNELL_LANGIT;
+
+            //bintang jendela
+            vec2 stP = dA.xz * SNELL_BINTANG_SKALA;
+            float stH = hashLangit(floor(stP) + vec2(7.3, 7.3));
+            vec2 stF = fract(stP) - vec2(0.5, 0.5);
+            float stBox = 1.0 - step(0.3, max(abs(stF.x), abs(stF.y)));
+            float stKedip = 0.6 + 0.4 * sin(tm * 2.0 + stH * 40.0);
+            float stM = step(1.0 - SNELL_BINTANG_DENSITAS, stH) * stBox * stKedip * (1.0 - snellDay) * smoothstep(0.05, 0.25, dA.y);
+            langitS += vec3_splat(stM * SNELL_BINTANG_TERANG);
 
             vec3 snellTir = snellAir * SNELL_GELAP * (0.3 + 0.7 * snellDay);
             _finalColor.rgb = mix(snellTir, langitS, snellWin) + vec3(0.2, 0.45, 0.6) * snellRim * 0.4 * snellDay;
