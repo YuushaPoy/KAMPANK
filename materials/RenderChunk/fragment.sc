@@ -10,11 +10,13 @@ uniform vec4 FogAndDistanceControl;
 #define UDW_FOG_MAX   1.0
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
-#define SNELL_GOYANG 0.1
+#define SNELL_DISTORSI 0.02
 #define SNELL_INDEKS 1.333
 #define SNELL_LANGIT 1.0
 #define SNELL_PUTIH 0.3
-#define SNELL_PUSAT 2.0
+#define SNELL_PUSAT 3.0
+#define SNELL_TEPI 0.6
+#define SNELL_TEPI_MULAI 0.55
 #define SNELL_BINTANG_SKALA 80.0
 #define SNELL_BINTANG_DENSITAS 0.07
 #define SNELL_BINTANG_TERANG 1.0
@@ -999,7 +1001,7 @@ void main() {
             vec3 snellAir = _finalColor.rgb;
             float snellDay = smoothstep(0.05, 0.4, wk);
             vec3 snellV = normalize(wp);
-            float snellCos = snellV.y + wave * SNELL_GOYANG;
+            float snellCos = snellV.y + wave * SNELL_DISTORSI;
             float snellWin = smoothstep(SNELL_SUDUT - SNELL_LEMBUT, SNELL_SUDUT + SNELL_LEMBUT, snellCos);
             float snellRim = smoothstep(SNELL_LEMBUT * 3.0, 0.0, abs(snellCos - SNELL_SUDUT));
 
@@ -1007,9 +1009,10 @@ void main() {
             float sinW = sqrt(max(1.0 - saturate(snellCos) * saturate(snellCos), 0.0));
             float sinA = min(sinW * SNELL_INDEKS, 1.0);
             float cosA = sqrt(max(1.0 - sinA * sinA, 0.0));
+            float sinAD = clamp(sinA + wave * SNELL_DISTORSI, 0.0, 1.0);
             vec2 hdir = normalize(snellV.xz + vec2(0.0001, 0.0001));
             vec3 dA = vec3(hdir.x * sinA, cosA, hdir.y * sinA);
-            float sGrad = clamp(pow(sinA, SNELL_PUSAT) * 1.6, 0.1, 1.0);
+            float sGrad = clamp(pow(sinAD, SNELL_PUSAT) * 1.6, 0.1, 1.0);
             vec3 cPagiS = mix(vec3(0.1, 0.5, 1.0) * 0.7, mix(vec3(0.1, 0.5, 1.0) * 0.7, vec3_splat(1.0), SNELL_PUTIH), sGrad);
             vec3 cSoreS = mix(vec3(0.1, 0.5, 1.0) * 0.2, vec3(1.0, 0.8, 0.1), sGrad);
             vec3 cMalamS = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), sGrad);
@@ -1018,7 +1021,7 @@ void main() {
             langitS = mix(langitS, cSoreS, saturate(sored * 2.0) * 0.7);
 
             //awan jendela
-            vec2 cBase = dA.xz / max(dA.y, 0.02);
+            vec2 cBase = dA.xz / max(dA.y, 0.02) + vec2_splat(wave * SNELL_DISTORSI);
             float cShd = 0.0;
             float cMm = 1.0;
             float cSc = 1.4;
@@ -1030,6 +1033,7 @@ void main() {
             }
             float cMask = cShd * smoothstep(0.0, 0.12, dA.y) * sDay;
             langitS = mix(langitS, vec3_splat(1.0), cMask) * SNELL_LANGIT;
+            langitS = mix(langitS, snellAir, smoothstep(SNELL_TEPI_MULAI, 1.0, sinAD) * SNELL_TEPI);
 
             //bintang jendela
             vec2 stP = dA.xz * SNELL_BINTANG_SKALA;
