@@ -13,6 +13,7 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_GOYANG 0.1
 #define SNELL_INDEKS 1.333
 #define SNELL_LANGIT 1.0
+#define SNELL_PUTIH 0.3
 #define SNELL_TIR vec3(0.02, 0.12, 0.22)
 #define UDW_FOG_START 8.0
 #define UDW_FOG_END   45.0
@@ -989,7 +990,7 @@ void main() {
             vec2 hdir = normalize(snellV.xz + vec2(0.0001, 0.0001));
             vec3 dA = vec3(hdir.x * sinA, cosA, hdir.y * sinA);
             float sGrad = clamp(sinA * 1.6, 0.1, 1.0);
-            vec3 cPagiS = mix(vec3(0.1, 0.5, 1.0) * 0.7, vec3_splat(1.0), sGrad);
+            vec3 cPagiS = mix(vec3(0.1, 0.5, 1.0) * 0.7, mix(vec3(0.1, 0.5, 1.0) * 0.7, vec3_splat(1.0), SNELL_PUTIH), sGrad);
             vec3 cSoreS = mix(vec3(0.1, 0.5, 1.0) * 0.2, vec3(1.0, 0.8, 0.1), sGrad);
             vec3 cMalamS = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), sGrad);
             float sDay = smoothstep(0.15, 0.7, wk);
