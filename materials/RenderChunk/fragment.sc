@@ -23,8 +23,11 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_BINTANG_DENSITAS 0.07
 #define SNELL_BINTANG_TERANG 1.0
 #define SNELL_GELAP 0.5
-#define UDW_FOG_START 8.0
-#define UDW_FOG_END   45.0
+#define UDW_DENSITAS 0.05
+#define UDW_WARNA vec3(0.02, 0.3, 0.5)
+#define UDW_EXT vec3(0.15, 0.08, 0.01)
+#define UDW_SCATTER 6.0
+#define UDW_TERANG 2.0
 //fog hujan
 #define FOG_HUJAN_JARAK 20.0
 float hashLangit(vec2 q) {
@@ -32,7 +35,7 @@ float hashLangit(vec2 q) {
 }
 
 float udwFog(float d) {
-    return UDW_FOG_MAX * smoothstep(UDW_FOG_START, UDW_FOG_END, d);
+    return UDW_FOG_MAX * (1.0 - exp(-d * UDW_DENSITAS));
 }
 
 //falloff cahaya block
@@ -481,6 +484,16 @@ void main() {
     float uwBawah = 1.0 - smoothstep(0.7, 1.2, wp.y);
     float uwIn = mix(1.0, uwBawah, uwTop);
 
+    //fog underwater
+    float udwDay = smoothstep(0.1, 0.7, wk);
+    vec3 udwFogCol = vec3_splat(0.0);
+    if (udw) {
+        vec3 udwV = normalize(wp);
+        float udwHg = 0.64 / (12.566 * pow(max(1.36 - 1.2 * udwV.y, 0.01), 1.5));
+        udwFogCol = UDW_WARNA * (0.05 + udwDay * 0.2) * UDW_TERANG;
+        udwFogCol *= 1.0 + UDW_SCATTER * udwHg * udwDay;
+    }
+
     //deteksi fajar dan senja
     float duskK = pow(max(min(1.0 - FogColor.b * 1.2, 1.0), 0.0), 0.5) * uv1.y;
     float fogA = mix(1.0, FogColor.a, SUN_FOGA);
@@ -637,8 +650,7 @@ void main() {
 
     //underwater
     if (udw && !(nether && akhir)) {
-        _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
-        _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 1.5, 1.4, 1.0)), Apa * saturate(lenKs / 50.0));
+        _finalColor.rgb *= exp(-UDW_EXT * 8.0) * (2.0 - 0.5 * (1.0 - udwDay));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.5, 4.7);
         _finalColor.xyz *= ACESFilm(_finalColor.xyz);
 
@@ -807,8 +819,7 @@ void main() {
 
     //underwater
     if (udw) {
-        _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
-        _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
+        _finalColor.rgb *= exp(-UDW_EXT * 8.0) * (2.0 - 0.5 * (1.0 - udwDay));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
 
         //caustic
@@ -1075,20 +1086,20 @@ void main() {
         _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
         _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / FOG_HUJAN_JARAK)), hujand);
         if (udw) {
-            _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+            _finalColor = mix(_finalColor, vec4(udwFogCol, 1.0), udwFog(lenKs));
         }
     }
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+        _finalColor = mix(_finalColor, vec4(udwFogCol, 1.0), udwFog(lenKs));
     }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor.rgb = mix(_finalColor.rgb, fogS.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp));
+        _finalColor.rgb = mix(_finalColor.rgb, udwFogCol, udwFog(lenWp));
     }
 #endif
 
