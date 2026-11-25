@@ -20,7 +20,7 @@ float bayer8(vec2 a) {
     return bayer4(0.5 * a) * 0.25 + bayer2(a);
 }
 
-#define UDW_WARNA vec3(0.02, 0.3, 0.5)
+#define UDW_WARNA vec3(0.02, 0.42, 0.38)
 #define UDW_SCATTER 6.0
 #define UDW_TERANG 2.0
 
