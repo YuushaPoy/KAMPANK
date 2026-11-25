@@ -16,6 +16,8 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_PUTIH 0.3
 #define SNELL_PUSAT 3.0
 #define SNELL_TEPI 0.6
+#define SNELL_TEPI_MALAM 0.9
+#define SNELL_MALAM_BIRU 0.45
 #define SNELL_TEPI_MULAI 0.55
 #define SNELL_BINTANG_SKALA 80.0
 #define SNELL_BINTANG_DENSITAS 0.07
@@ -1015,7 +1017,7 @@ void main() {
             float sGrad = clamp(pow(sinAD, SNELL_PUSAT) * 1.6, 0.1, 1.0);
             vec3 cPagiS = mix(vec3(0.1, 0.5, 1.0) * 0.7, mix(vec3(0.1, 0.5, 1.0) * 0.7, vec3_splat(1.0), SNELL_PUTIH), sGrad);
             vec3 cSoreS = mix(vec3(0.1, 0.5, 1.0) * 0.2, vec3(1.0, 0.8, 0.1), sGrad);
-            vec3 cMalamS = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0), sGrad);
+            vec3 cMalamS = mix(vec3_splat(0.1), vec3(0.1, 0.5, 1.0) * SNELL_MALAM_BIRU, sGrad);
             float sDay = smoothstep(0.15, 0.7, wk);
             vec3 langitS = mix(cMalamS, cPagiS, sDay);
             langitS = mix(langitS, cSoreS, saturate(sored * 2.0) * 0.7);
@@ -1033,7 +1035,7 @@ void main() {
             }
             float cMask = cShd * smoothstep(0.0, 0.12, dA.y) * sDay;
             langitS = mix(langitS, vec3_splat(1.0), cMask) * SNELL_LANGIT;
-            langitS = mix(langitS, snellAir, smoothstep(SNELL_TEPI_MULAI, 1.0, sinAD) * SNELL_TEPI);
+            langitS = mix(langitS, snellAir * (0.3 + 0.7 * snellDay), smoothstep(SNELL_TEPI_MULAI, 1.0, sinAD) * mix(SNELL_TEPI_MALAM, SNELL_TEPI, sDay));
 
             //bintang jendela
             vec2 stP = dA.xz * SNELL_BINTANG_SKALA;
