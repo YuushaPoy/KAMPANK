@@ -518,7 +518,8 @@ void main() {
     float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskW;
     float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskW;
     float sunDbg = step(0.5, SUN_DEBUG) * (1.0 - step(1.5, SUN_DEBUG));
-    float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * (1.0 - siangd) * (1.0 - malamd));
+    float soreHujan = (1.0 - smoothstep(0.0, 0.35, hujand)) * smoothstep(0.05, 0.2, max(fclr.r, max(fclr.g, fclr.b)) - min(fclr.r, min(fclr.g, fclr.b)));
+    float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * (1.0 - siangd) * (1.0 - malamd)) * soreHujan;
     vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT * soreWin);
 
 #if defined(OPAQUE)
