@@ -15,8 +15,8 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_LANGIT 1.0
 #define SNELL_PUTIH 0.3
 #define SNELL_PUSAT 2.0
-#define SNELL_BINTANG_SKALA 40.0
-#define SNELL_BINTANG_DENSITAS 0.04
+#define SNELL_BINTANG_SKALA 80.0
+#define SNELL_BINTANG_DENSITAS 0.07
 #define SNELL_BINTANG_TERANG 1.0
 #define SNELL_GELAP 0.5
 #define UDW_FOG_START 8.0
@@ -490,7 +490,7 @@ void main() {
     sunrise *= uv1.y;
     float sunset = duskK * fogA * sideS;
     sunset *= uv1.y;
-    float twiGate = (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
+    float twiGate = (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw) * smoothstep(0.15, 0.4, max(fclr.r, max(fclr.g, fclr.b)));
     sunrise *= twiGate;
     sunset *= twiGate;
     float duskAmt = saturate(sunrise + sunset);
@@ -1033,11 +1033,12 @@ void main() {
 
             //bintang jendela
             vec2 stP = dA.xz * SNELL_BINTANG_SKALA;
-            float stH = hashLangit(floor(stP) + vec2(7.3, 7.3));
-            vec2 stF = fract(stP) - vec2(0.5, 0.5);
-            float stBox = 1.0 - step(0.3, max(abs(stF.x), abs(stF.y)));
-            float stKedip = 0.6 + 0.4 * sin(tm * 2.0 + stH * 40.0);
-            float stM = step(1.0 - SNELL_BINTANG_DENSITAS, stH) * stBox * stKedip * (1.0 - snellDay) * smoothstep(0.05, 0.25, dA.y);
+            vec2 stI = floor(stP);
+            float stH = hashLangit(stI + vec2(7.3, 7.3));
+            vec2 stO = (vec2(hashLangit(stI + vec2(3.1, 3.1)), hashLangit(stI + vec2(8.7, 8.7))) - 0.5) * 0.5;
+            float stD = smoothstep(0.12, 0.0, length(fract(stP) - 0.5 - stO));
+            float stKedip = 0.5 + 0.5 * sin(tm * 2.5 + stH * 60.0);
+            float stM = step(1.0 - SNELL_BINTANG_DENSITAS, stH) * stD * stKedip * (1.0 - snellDay) * smoothstep(0.05, 0.25, dA.y);
             langitS += vec3_splat(stM * SNELL_BINTANG_TERANG);
 
             vec3 snellTir = snellAir * SNELL_GELAP * (0.3 + 0.7 * snellDay);
