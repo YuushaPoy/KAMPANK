@@ -103,8 +103,11 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define AWAN_AIR_TINGGI 10.0
 
 //god rays bawah air
-#define GODRAY_POWER 0.8
-#define GODRAY_DEKAT 5.0
+#define GODRAY_POWER 0.35
+#define GODRAY_BATAS_A 0.25
+#define GODRAY_BATAS_B 0.9
+#define GODRAY_JITTER 0.5
+#define GODRAY_DEKAT 8.0
 #define GODRAY_JAUH_MIN 24.0
 #define GODRAY_JAUH_MAX 48.0
 #define GODRAY_GESER 0.10
@@ -314,7 +317,7 @@ float causticRay(vec3 pp, vec3 nn) {
 
 float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
     float tm = ViewPositionAndTime.w;
-    float jit = bayer8(fc);
+    float jit = bayer8(fc) * GODRAY_JITTER;
     float acc = 0.0;
     for (int i = 0; i < 6; i++) {
         float t = (float(i) + jit) / 6.0;
@@ -322,7 +325,7 @@ float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
         vec2 q = vec2(sp.x + sp.y * GODRAY_MIRING + tm * GODRAY_GESER, sp.z + tm * GODRAY_GESER * 0.4);
         float n = noiseTile(q, GODRAY_PERIODE);
         float kedip = 1.0 - GODRAY_KEDIP + GODRAY_KEDIP * (0.5 + 0.5 * sin(tm * 1.4 + n * 12.0));
-        acc += smoothstep(0.40, 0.75, n) * kedip;
+        acc += smoothstep(GODRAY_BATAS_A, GODRAY_BATAS_B, n) * kedip;
     }
     return acc / 6.0;
 }
@@ -620,12 +623,10 @@ void main() {
 
     //underwater
     if (udw && !(nether && akhir)) {
-        vec4 uwSrc = _finalColor;
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 1.5, 1.4, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.5, 4.7);
         _finalColor.xyz *= ACESFilm(_finalColor.xyz);
-        _finalColor = mix(uwSrc, _finalColor, uwIn);
 
         //caustic
         float skyMax = 0.9375;
@@ -791,11 +792,9 @@ void main() {
 
     //underwater
     if (udw) {
-        vec4 uwSrc = _finalColor;
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
-        _finalColor = mix(uwSrc, _finalColor, uwIn);
 
         //caustic
         float skyMax = 0.9375;
@@ -1049,20 +1048,20 @@ void main() {
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / FOG_HUJAN_JARAK)), hujand);
         if (udw) {
-            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs) * uwIn);
+            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
         }
     }
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs) * uwIn);
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
     }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor.rgb = mix(_finalColor.rgb, v_fog.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp) * max(uwIn, step(N.y, -0.5)));
+        _finalColor.rgb = mix(_finalColor.rgb, v_fog.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp));
     }
 #endif
 
