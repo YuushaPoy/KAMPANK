@@ -65,6 +65,10 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define SUN_TERANG vec3(1.3, 1.1, 0.8)
 #define SUN_GELAP vec3(0.7, 0.72, 0.85)
 #define SUN_GAIN 2.0
+#define SORE_FOG_WARNA vec3(1.0, 0.82, 0.3)
+#define SORE_FOG_KUAT 0.75
+#define SORE_WARNA vec3(1.15, 1.0, 0.7)
+#define SORE_KUAT 0.6
 #define SUN_ARAH 0.0
 #define SUN_LIHAT 4.0
 #define SUN_FOGA 1.0
@@ -491,6 +495,7 @@ void main() {
     float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskW;
     float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskW;
     float sunDbg = step(0.5, SUN_DEBUG) * (1.0 - step(1.5, SUN_DEBUG));
+    vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT);
 
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
@@ -503,6 +508,7 @@ void main() {
     float dusG = (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_TERANG, sunFace * dusG);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_GELAP, sunDark * dusG);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * sunDbg);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * sunDbg);
 
@@ -624,7 +630,7 @@ void main() {
     //underwater
     if (udw && !(nether && akhir)) {
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
-        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 1.5, 1.4, 1.0)), Apa * saturate(lenKs / 50.0));
+        _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 1.5, 1.4, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.5, 4.7);
         _finalColor.xyz *= ACESFilm(_finalColor.xyz);
 
@@ -699,6 +705,7 @@ void main() {
     float dusG = (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_TERANG, sunFace * dusG);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_GELAP, sunDark * dusG);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * sunDbg);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * sunDbg);
     if (kolor.g > kolor.r) {
@@ -793,7 +800,7 @@ void main() {
     //underwater
     if (udw) {
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
-        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
+        _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
 
         //caustic
@@ -1043,25 +1050,25 @@ void main() {
     //fog
 #if defined(OPAQUE)
     if (!(akhir)) {
-        vec4 fgst = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(lenKs / 100.0)), (1.0 - hujand));
+        vec4 fgst = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(lenKs / 100.0)), (1.0 - hujand));
         _finalColor = fgst;
-        _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
-        _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / FOG_HUJAN_JARAK)), hujand);
+        _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
+        _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / FOG_HUJAN_JARAK)), hujand);
         if (udw) {
-            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+            _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
         }
     }
 #elif defined(ALPHA_TEST)
-    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
-    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / FOG_HUJAN_JARAK)), hujand);
+    _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
+    _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+        _finalColor = mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
     }
 #elif defined(TRANSPARENT)
-    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
-    _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
+    _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
+    _finalColor = mix(_finalColor, mix(_finalColor, fogS * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor.rgb = mix(_finalColor.rgb, v_fog.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp));
+        _finalColor.rgb = mix(_finalColor.rgb, fogS.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp));
     }
 #endif
 
