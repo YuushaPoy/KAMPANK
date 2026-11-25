@@ -23,9 +23,9 @@ uniform vec4 FogAndDistanceControl;
 #define SNELL_BINTANG_DENSITAS 0.07
 #define SNELL_BINTANG_TERANG 1.0
 #define SNELL_GELAP 0.5
-#define UDW_DENSITAS 0.05
-#define UDW_WARNA vec3(0.02, 0.3, 0.5)
-#define UDW_EXT vec3(0.15, 0.08, 0.01)
+#define UDW_DENSITAS 0.09
+#define UDW_WARNA vec3(0.02, 0.42, 0.38)
+#define UDW_COLOR vec3(0.3, 1.1, 0.85)
 #define UDW_SCATTER 6.0
 #define UDW_TERANG 2.0
 //fog hujan
@@ -80,6 +80,8 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define SORE_FOG_KUAT 0.75
 #define SORE_WARNA vec3(1.15, 1.0, 0.7)
 #define SORE_KUAT 0.6
+#define SORE_BATAS_A 0.35
+#define SORE_BATAS_B 0.9
 #define SUN_ARAH 0.0
 #define SUN_LIHAT 4.0
 #define SUN_FOGA 1.0
@@ -516,7 +518,8 @@ void main() {
     float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskW;
     float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskW;
     float sunDbg = step(0.5, SUN_DEBUG) * (1.0 - step(1.5, SUN_DEBUG));
-    vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT);
+    float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * (1.0 - siangd) * (1.0 - malamd));
+    vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT * soreWin);
 
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
@@ -529,7 +532,7 @@ void main() {
     float dusG = (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_TERANG, sunFace * dusG);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_GELAP, sunDark * dusG);
-    _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT * soreWin);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * sunDbg);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * sunDbg);
 
@@ -650,7 +653,7 @@ void main() {
 
     //underwater
     if (udw && !(nether && akhir)) {
-        _finalColor.rgb *= exp(-UDW_EXT * 8.0) * (2.0 - 0.5 * (1.0 - udwDay));
+        _finalColor.rgb *= UDW_COLOR;
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.5, 4.7);
         _finalColor.xyz *= ACESFilm(_finalColor.xyz);
 
@@ -725,7 +728,7 @@ void main() {
     float dusG = (1.0 - pow(v_lightmapUV.x * 0.9, 4.7)) * (1.0 - goa) * (1.0 - hujand);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_TERANG, sunFace * dusG);
     _finalColor.xyz *= mix(vec3_splat(1.0), SUN_GELAP, sunDark * dusG);
-    _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT);
+    _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT * soreWin);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * sunDbg);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * sunDbg);
     if (kolor.g > kolor.r) {
@@ -819,7 +822,7 @@ void main() {
 
     //underwater
     if (udw) {
-        _finalColor.rgb *= exp(-UDW_EXT * 8.0) * (2.0 - 0.5 * (1.0 - udwDay));
+        _finalColor.rgb *= UDW_COLOR;
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
 
         //caustic
