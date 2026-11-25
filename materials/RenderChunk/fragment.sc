@@ -461,6 +461,11 @@ void main() {
     float isudw = step(fctl.x, 0.00999) * (akhir ? 0.0 : 1.0);
     float isakhir = endF;
 
+    //dalam air
+    float uwTop = smoothstep(0.9275, 0.9365, uv1.y);
+    float uwBawah = 1.0 - smoothstep(0.7, 1.2, wp.y);
+    float uwIn = mix(1.0, uwBawah, uwTop);
+
     //deteksi fajar dan senja
     float duskK = pow(max(min(1.0 - FogColor.b * 1.2, 1.0), 0.0), 0.5) * uv1.y;
     float fogA = mix(1.0, FogColor.a, SUN_FOGA);
@@ -615,10 +620,12 @@ void main() {
 
     //underwater
     if (udw && !(nether && akhir)) {
+        vec4 uwSrc = _finalColor;
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 1.5, 1.4, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.5, 4.7);
         _finalColor.xyz *= ACESFilm(_finalColor.xyz);
+        _finalColor = mix(uwSrc, _finalColor, uwIn);
 
         //caustic
         float skyMax = 0.9375;
@@ -784,9 +791,11 @@ void main() {
 
     //underwater
     if (udw) {
+        vec4 uwSrc = _finalColor;
         _finalColor.rgb *= vec3(0.3, 1.1, 0.85);
         _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 1.5, 1.0)), Apa * saturate(lenKs / 50.0));
         _finalColor.rgb += _finalColor.rgb * (vec3(0.0, 0.7, 1.0) * 1.15) * pow(v_lightmapUV.x * 0.9, 4.7);
+        _finalColor = mix(uwSrc, _finalColor, uwIn);
 
         //caustic
         float skyMax = 0.9375;
@@ -1040,20 +1049,20 @@ void main() {
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / 20.0)), dudan);
         _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(lenKs / FOG_HUJAN_JARAK)), hujand);
         if (udw) {
-            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+            _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs) * uwIn);
         }
     }
 #elif defined(ALPHA_TEST)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-ks) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-ks) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs));
+        _finalColor = mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), udwFog(lenKs) * uwIn);
     }
 #elif defined(TRANSPARENT)
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(1.1, 1.1, 1.1, 1.0)), Apa * saturate(length(-wp) / 100.0)), (1.0 - hujand));
     _finalColor = mix(_finalColor, mix(_finalColor, v_fog * sqrt(vec4(0.8, 0.8, 0.8, 1.0)), Apa * saturate(length(-wp) / FOG_HUJAN_JARAK)), hujand);
     if (udw) {
-        _finalColor.rgb = mix(_finalColor.rgb, v_fog.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp));
+        _finalColor.rgb = mix(_finalColor.rgb, v_fog.rgb * sqrt(vec3(0.8, 0.8, 0.8)), udwFog(lenWp) * max(uwIn, step(N.y, -0.5)));
     }
 #endif
 
@@ -1061,7 +1070,7 @@ void main() {
     //god rays
     if (udw && wk > 0.05) {
         float grJarak = smoothstep(1.0, GODRAY_DEKAT, lenWp) * (1.0 - smoothstep(GODRAY_JAUH_MIN, GODRAY_JAUH_MAX, lenWp));
-        float grGate = grJarak * uv1.y;
+        float grGate = grJarak * uv1.y * uwIn;
         if (grGate > 0.001) {
             float grDens = godRayFog(p, wp, gl_FragCoord.xy);
             float grBawah = smoothstep(-0.7, -0.2, N.y);
