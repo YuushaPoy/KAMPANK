@@ -83,8 +83,6 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define NL_PBR_PARALLAX_STEPS 8          // 4 cepat ~ 16 halus
 #define NL_PBR_PARALLAX_DIST 24.0        // jarak parallax hilang
 #define NL_PBR_REFL_KUAT 0.55            // kekuatan refleksi langit (metal)
-#define NL_PBR_SPEC_KUAT 0.35            // kekuatan kilau matahari
-#define NL_PBR_SPEC_MAX 6.0              // batas atas kilau
 #define NL_PBR_RELIEF_SUN 0.6            // dasar shading relief matahari
 #define NL_PBR_RELIEF_KUAT 1.0           // relief matahari 0 mati ~ 1 penuh
 #define NL_PBR_RELIEF_AMB 1.0            // relief ambient 0 mati ~ 1 penuh
@@ -98,51 +96,6 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #endif
 
 #if defined(PBR_ON)
-// ggx lobe
-highp float nlPbrNoH(highp float radiusTan, highp float NoL, highp float NoV, highp float VoL) {
-    highp float radiusCos = 1.0 / sqrt(1.0 + radiusTan * radiusTan);
-    highp float RoL = 2.0 * NoL * NoV - VoL;
-    if (RoL >= radiusCos) {
-        return 1.0;
-    }
-    highp float rOverLengthT = radiusCos * radiusTan / sqrt(max(1.0 - RoL * RoL, 0.000001));
-    highp float NoTr = rOverLengthT * (NoV - RoL * NoL);
-    highp float VoTr = rOverLengthT * (2.0 * NoV * NoV - 1.0 - RoL * VoL);
-    highp float triple = sqrt(clamp(1.0 - NoL * NoL - NoV * NoV - VoL * VoL + 2.0 * NoL * NoV * VoL, 0.0, 1.0));
-    highp float NoBr = rOverLengthT * triple;
-    highp float VoBr = rOverLengthT * (2.0 * triple * NoV);
-    highp float NoLVTr = NoL * radiusCos + NoV + NoTr;
-    highp float VoLVTr = VoL * radiusCos + 1.0 + VoTr;
-    highp float p = NoBr * VoLVTr;
-    highp float q = NoLVTr * VoLVTr;
-    highp float s = VoBr * NoLVTr;
-    highp float xNum = q * (-0.5 * p + 0.25 * VoBr * NoLVTr);
-    highp float xDenom = p * p + s * (s - 2.0 * p) + NoLVTr * ((NoL * radiusCos + NoV) * VoLVTr * VoLVTr + q * (-0.5 * (VoLVTr + VoL * radiusCos) - 0.5));
-    highp float twoX1 = 2.0 * xNum / max(xDenom * xDenom + xNum * xNum, 0.00000001);
-    highp float sinTheta = twoX1 * xDenom;
-    highp float cosTheta = 1.0 - twoX1 * xNum;
-    NoTr = cosTheta * NoTr + sinTheta * NoBr;
-    VoTr = cosTheta * VoTr + sinTheta * VoBr;
-    highp float newNoL = NoL * radiusCos + NoTr;
-    highp float newVoL = VoL * radiusCos + VoTr;
-    highp float NoH = NoV + newNoL;
-    highp float HoH = 2.0 * newVoL + 2.0;
-    return max(NoH * NoH / max(HoH, 0.0001), 0.0);
-}
-
-// specular
-highp float nlPbrGGX(highp vec3 V, highp vec3 L, highp vec3 N, highp float r, highp float f0, float sunSize) {
-    r = max(r, 0.05);
-    highp float a2 = pow(r, 4.0);
-    highp vec3 H = normalize(L + V);
-    highp float HoL = clamp(dot(H, L), 0.0, 1.0);
-    highp float NoL = clamp(dot(N, L), 0.0, 1.0);
-    highp float NoH = nlPbrNoH(sunSize, NoL, dot(N, V), dot(V, L));
-    highp float F = (1.0 - f0) * pow(1.0 - HoL, 5.0) + f0;
-    highp float denom = NoH * NoH * (a2 - 1.0) + 1.0;
-    return NoL * a2 / (3.14159265 * denom * denom) * F / (HoL * HoL * (1.0 - a2) + a2);
-}
-
 float nlPbrFresnel(vec3 N, vec3 V, vec3 spec) {
     float NdotV = 1.0 - clamp(dot(N, V), 0.0, 1.0);
     return mix((1.0 - spec.r) * pow(NdotV, 3.0), 1.0, spec.g);
@@ -187,18 +140,15 @@ bool pbrMarked(sampler2D tex, vec2 uv, vec2 dim) {
     return int(texture2DLod(tex, pbrAlbedoUV(uv, dim), 0.0).a * 255.0 + 0.5) == 250;
 }
 
-// kilau matahari + refleksi panorama
-vec3 pbrSpecPass(sampler2D tex, vec2 dim, vec3 col, vec3 Vv, vec3 Nn, vec3 Ld, vec3 sunCol, float sunAmt, vec3 ambCol, vec4 spec, vec3 tint, float refl) {
-    float f0 = spec.g * 0.98 + 0.02;
-    float g = clamp(nlPbrGGX(Vv, Ld, Nn, spec.r, f0, 0.05), 0.0, NL_PBR_SPEC_MAX);
+// refleksi panorama
+vec3 pbrPanoPass(sampler2D tex, vec2 dim, vec3 col, vec3 Vv, vec3 Nn, vec3 ambCol, vec3 tint, float refl) {
 #if defined(NL_PBR_FAKE_TERRAIN)
     if (refl > 0.001) {
         vec4 pano = nlPbrFakeTerrain(tex, dim, reflect(-Vv, Nn));
         col = mix(col, pano.rgb * ambCol * tint, saturate(pano.a * refl));
-        g *= 1.0 - pano.a * (1.0 - spec.r);
     }
 #endif
-    return col + sunCol * (g * sunAmt * NL_PBR_SPEC_KUAT) * tint;
+    return col;
 }
 #endif
 
@@ -948,12 +898,12 @@ void main() {
 
 #if defined(PBR_ON)
         if (pbrOn) {
-            //pbr: tint refleksi, kilau matahari, panorama
+            //pbr: tint refleksi dan panorama
             vec3 pbrTint = saturate(pbrBase / max(max(pbrBase.r, max(pbrBase.g, pbrBase.b)), 0.001));
             pbrTint = mix(vec3_splat(1.0), pbrTint, pSpec.g);
             _finalColor.rgb = sebelumMetal + (_finalColor.rgb - sebelumMetal) * pbrTint;
             float pbrGate = saturate(uv1.y * uv1.y) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir);
-            _finalColor.rgb = pbrSpecPass(s_MatTexture, pDim, _finalColor.rgb, V, N, pbrL, pbrSunCol, pbrSunAmt, pbrAmb, pSpec, pbrTint, pbrFr * pbrGate);
+            _finalColor.rgb = pbrPanoPass(s_MatTexture, pDim, _finalColor.rgb, V, N, pbrAmb, pbrTint, pbrFr * pbrGate);
         }
 #endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
@@ -1159,12 +1109,12 @@ void main() {
 
 #if defined(PBR_ON)
         if (pbrOn) {
-            //pbr: tint refleksi, kilau matahari, panorama
+            //pbr: tint refleksi dan panorama
             vec3 pbrTint = saturate(pbrBase / max(max(pbrBase.r, max(pbrBase.g, pbrBase.b)), 0.001));
             pbrTint = mix(vec3_splat(1.0), pbrTint, pSpec.g);
             _finalColor.rgb = sebelumMetal + (_finalColor.rgb - sebelumMetal) * pbrTint;
             float pbrGate = saturate(uv1.y * uv1.y) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir);
-            _finalColor.rgb = pbrSpecPass(s_MatTexture, pDim, _finalColor.rgb, V, N, pbrL, pbrSunCol, pbrSunAmt, pbrAmb, pSpec, pbrTint, pbrFr * pbrGate);
+            _finalColor.rgb = pbrPanoPass(s_MatTexture, pDim, _finalColor.rgb, V, N, pbrAmb, pbrTint, pbrFr * pbrGate);
         }
 #endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
