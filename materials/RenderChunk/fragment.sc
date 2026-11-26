@@ -11,8 +11,6 @@ uniform vec4 FogAndDistanceControl;
 #define SHEET_PENANDA 249
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
-#define NORMAL_KUAT 1.0
-#define NORMAL_JARAK 14.0
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
 #define SNELL_DISTORSI 0.02
@@ -53,6 +51,8 @@ float lightFalloff(float x) {
 uniform vec4 DitherParams;
 uniform vec4 DitherParams2[3];
 uniform vec4 ViewPositionAndTime;
+uniform vec4 TimeOfDay;
+uniform vec4 CameraPosition;
 
 SAMPLER2D_AUTOREG(s_MatTexture);
 SAMPLER2D_AUTOREG(s_LightMapTexture);
@@ -62,6 +62,187 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 
 #if !defined(SEASONS) || defined(ALPHA_TEST)
     #define KODE_EXTRA 1
+#endif
+
+//pbr (tile 256px: albedo | normal+height / spec | subsurface+emissive)
+//matikan seluruh pbr: hapus/komen baris #define NL_PBR
+#define NL_PBR
+#define NL_PBR_TILE_SIZE 256.0           // ukuran tile block di atlas
+#define NL_PBR_TILE_CAUSTIC 1.0          // cell atlas water_caustics
+#define NL_PBR_TILE_WAVES 2.0            // cell atlas water_waves
+#define NL_PBR_TILE_PANORAMA 3.0         // cell atlas panorama0
+#define NL_PBR_FAKE_TERRAIN              // [toggle] panorama di refleksi
+#define NL_PBR_ATLAS_CAUSTIC             // [toggle] caustic bawah air dari atlas
+#define NL_PBR_CAUSTIC_KUAT 0.35
+#define NL_PBR_MIP_BIAS 0.0              // -1.0 tajam ~ 1.0 lembut
+#define NL_PBR_NORMAL_STRENGTH 1.5       // 1.0 sama tekstur ~ 3.0 bergelombang
+#define NL_PBR_NORMAL_FLIP vec2(1.0, 1.0) // vec2(-1.0,-1.0) kalau bump terbalik
+#define NL_PBR_AMBIENT_RELIEF 0.55       // 0.4 datar ~ 0.9 berbentuk
+#define NL_PBR_PARALLAX                  // [toggle] kedalaman dari alpha normal map
+#define NL_PBR_PARALLAX_SCALE 0.05       // 0.02 dangkal ~ 0.12 dalam
+#define NL_PBR_PARALLAX_STEPS 8          // 4 cepat ~ 16 halus
+#define NL_PBR_PARALLAX_DIST 24.0        // jarak parallax hilang
+#define NL_PBR_WATER_ROUGH 0.08          // 0.0 cermin ~ 0.4 kasar
+#define NL_PBR_REFL_KUAT 0.55            // kekuatan refleksi langit (metal)
+#define NL_PBR_SPEC_KUAT 0.35            // kekuatan kilau matahari
+#define NL_PBR_SPEC_MAX 6.0              // batas atas kilau
+#define NL_PBR_RELIEF_SUN 0.6            // dasar shading relief matahari
+#define NL_PBR_RELIEF_KUAT 1.0           // relief matahari 0 mati ~ 1 penuh
+#define NL_PBR_RELIEF_AMB 1.0            // relief ambient 0 mati ~ 1 penuh
+#define NL_PBR_AO_KUAT 1.0               // ao dari spec.b
+#define NL_PBR_EMISSIVE 1.0              // emissive dari subsurface.g
+#define NL_PBR_SUN_PHASE 0.0             // geser fase matahari (kelipatan 0.25)
+#define NL_PBR_SUN_FLIP vec3(1.0, 1.0, 1.0) // vec3(-1.0,1.0,1.0) kalau arah timur-barat terbalik
+
+#if defined(NL_PBR) && !defined(RENDER_AS_BILLBOARDS)
+    #define PBR_ON 1
+#endif
+
+#if defined(PBR_ON)
+// ggx lobe
+highp float nlPbrNoH(highp float radiusTan, highp float NoL, highp float NoV, highp float VoL) {
+    highp float radiusCos = 1.0 / sqrt(1.0 + radiusTan * radiusTan);
+    highp float RoL = 2.0 * NoL * NoV - VoL;
+    if (RoL >= radiusCos) {
+        return 1.0;
+    }
+    highp float rOverLengthT = radiusCos * radiusTan / sqrt(max(1.0 - RoL * RoL, 0.000001));
+    highp float NoTr = rOverLengthT * (NoV - RoL * NoL);
+    highp float VoTr = rOverLengthT * (2.0 * NoV * NoV - 1.0 - RoL * VoL);
+    highp float triple = sqrt(clamp(1.0 - NoL * NoL - NoV * NoV - VoL * VoL + 2.0 * NoL * NoV * VoL, 0.0, 1.0));
+    highp float NoBr = rOverLengthT * triple;
+    highp float VoBr = rOverLengthT * (2.0 * triple * NoV);
+    highp float NoLVTr = NoL * radiusCos + NoV + NoTr;
+    highp float VoLVTr = VoL * radiusCos + 1.0 + VoTr;
+    highp float p = NoBr * VoLVTr;
+    highp float q = NoLVTr * VoLVTr;
+    highp float s = VoBr * NoLVTr;
+    highp float xNum = q * (-0.5 * p + 0.25 * VoBr * NoLVTr);
+    highp float xDenom = p * p + s * (s - 2.0 * p) + NoLVTr * ((NoL * radiusCos + NoV) * VoLVTr * VoLVTr + q * (-0.5 * (VoLVTr + VoL * radiusCos) - 0.5));
+    highp float twoX1 = 2.0 * xNum / max(xDenom * xDenom + xNum * xNum, 0.00000001);
+    highp float sinTheta = twoX1 * xDenom;
+    highp float cosTheta = 1.0 - twoX1 * xNum;
+    NoTr = cosTheta * NoTr + sinTheta * NoBr;
+    VoTr = cosTheta * VoTr + sinTheta * VoBr;
+    highp float newNoL = NoL * radiusCos + NoTr;
+    highp float newVoL = VoL * radiusCos + VoTr;
+    highp float NoH = NoV + newNoL;
+    highp float HoH = 2.0 * newVoL + 2.0;
+    return max(NoH * NoH / max(HoH, 0.0001), 0.0);
+}
+
+// specular
+highp float nlPbrGGX(highp vec3 V, highp vec3 L, highp vec3 N, highp float r, highp float f0, float sunSize) {
+    r = max(r, 0.05);
+    highp float a2 = pow(r, 4.0);
+    highp vec3 H = normalize(L + V);
+    highp float HoL = clamp(dot(H, L), 0.0, 1.0);
+    highp float NoL = clamp(dot(N, L), 0.0, 1.0);
+    highp float NoH = nlPbrNoH(sunSize, NoL, dot(N, V), dot(V, L));
+    highp float F = (1.0 - f0) * pow(1.0 - HoL, 5.0) + f0;
+    highp float denom = NoH * NoH * (a2 - 1.0) + 1.0;
+    return NoL * a2 / (3.14159265 * denom * denom) * F / (HoL * HoL * (1.0 - a2) + a2);
+}
+
+float nlPbrFresnel(vec3 N, vec3 V, vec3 spec) {
+    float NdotV = 1.0 - clamp(dot(N, V), 0.0, 1.0);
+    return mix((1.0 - spec.r) * pow(NdotV, 3.0), 1.0, spec.g);
+}
+
+vec2 nlPbrRadial(vec3 d) {
+    d = normalize(d);
+    float lon = atan2(d.z, d.x);
+    float lat = acos(clamp(d.y, -1.0, 1.0));
+    return vec2(lon * 0.31830989 * 0.5 + 0.5, lat * 0.31830989);
+}
+
+// atlas cell sample
+vec4 nlPbrTile(sampler2D tex, vec2 dim, float cell, vec2 uv) {
+    vec2 px = vec2(cell * NL_PBR_TILE_SIZE, 0.0) + uv * NL_PBR_TILE_SIZE;
+    return texture2DLod(tex, px / dim, 0.0);
+}
+
+// water waves, w = 1 kalau tile valid
+vec4 nlPbrWaves(sampler2D tex, vec2 dim, highp vec3 coord, highp float t) {
+    highp float timer = t * 2.0;
+    highp vec2 pw = coord.xz / 5.0;
+    pw.xy -= coord.y / 10.0;
+    pw.x = -pw.x;
+    pw.x += (timer / 40.0) * 0.9;
+    pw.y += (timer / 40.0) * 0.9;
+
+    vec3 s1 = nlPbrTile(tex, dim, NL_PBR_TILE_WAVES, fract(pw * vec2(2.0, 1.4) + vec2(0.0, -pw.x * 2.1))).rgb;
+    vec3 waves = s1 * 0.05;
+
+    pw /= 2.1;
+    pw.xy -= vec2((timer / 30.0) * 0.9, (timer / 50.0) * 0.9);
+    vec3 s2 = nlPbrTile(tex, dim, NL_PBR_TILE_WAVES, fract(pw * vec2(2.0, 1.4) + vec2(0.0, -pw.x * 2.1))).rgb;
+    waves += s2 * 0.15;
+
+    pw /= 1.5;
+    pw.x += (timer / 20.0) * 0.9;
+    vec3 s3 = nlPbrTile(tex, dim, NL_PBR_TILE_WAVES, fract(pw * vec2(1.0, 0.75) + vec2(0.0, pw.x * 1.1))).rgb;
+    waves += s3 * 0.35;
+
+    pw /= 1.3;
+    pw.x -= (timer / 25.0) * 0.9;
+    vec3 s4 = nlPbrTile(tex, dim, NL_PBR_TILE_WAVES, fract(pw * vec2(1.0, 0.75) + vec2(0.0, -pw.x * 1.7))).rgb;
+    waves += s4 * 0.45;
+
+    float valid = step(0.8, (s1.b + s2.b + s3.b + s4.b) * 0.25);
+
+    waves = waves * 2.0 - 1.0;
+    waves.b = sqrt(max(1.0 - waves.r * waves.r - waves.g * waves.g, 0.0)) * 10.0;
+    return vec4(normalize(waves), valid);
+}
+
+// fallback waves
+vec3 nlPbrWavesProc(highp vec3 coord, highp float t) {
+    highp vec2 pw = coord.xz;
+    float dx = cos(pw.x * 1.7 + t * 1.3) * 0.85 + cos((pw.x + pw.y) * 3.1 + t * 1.9) * 0.93;
+    float dz = cos(pw.y * 2.3 - t * 1.1) * 1.15 + cos((pw.x + pw.y) * 3.1 + t * 1.9) * 0.93;
+    return normalize(vec3(-dx * 0.03, -dz * 0.03, 1.0));
+}
+
+vec3 nlPbrWaterNormal(sampler2D tex, vec2 dim, highp vec3 coord, highp float t) {
+    vec4 w = nlPbrWaves(tex, dim, coord, t);
+    return mix(nlPbrWavesProc(coord, t), w.xyz, w.w);
+}
+
+// caustic bawah air
+vec3 nlPbrCaustic(sampler2D tex, vec2 dim, vec3 gPos, vec3 lightDir) {
+    vec3 rl = refract(lightDir, vec3(0.0, 1.0, 0.0), 1.0 / 1.3333);
+    vec2 rv = gPos.xz + rl.xz * (gPos.y / max(abs(rl.y), 0.05));
+    return nlPbrTile(tex, dim, NL_PBR_TILE_CAUSTIC, fract(rv / vec2(2.5, 5.0) * vec2(-1.0, -1.0))).rgb * 11.5;
+}
+
+// refleksi panorama
+vec4 nlPbrFakeTerrain(sampler2D tex, vec2 dim, vec3 dir) {
+    vec2 c = nlPbrRadial(dir);
+    vec2 px = vec2(NL_PBR_TILE_PANORAMA * NL_PBR_TILE_SIZE, 0.0) + c * NL_PBR_TILE_SIZE * vec2(2.0, 1.0);
+    return texture2DLod(tex, px / dim, 0.0);
+}
+
+// uv albedo (slice kiri atas) dari uv tile, tanpa parallax. dipakai depth only
+vec2 pbrAlbedoUV(vec2 uv, vec2 dim) {
+    vec2 tf = fract(uv * (dim / NL_PBR_TILE_SIZE));
+    vec2 to = round(uv * dim - tf * NL_PBR_TILE_SIZE);
+    return (to + tf * (NL_PBR_TILE_SIZE * 0.5)) / dim;
+}
+
+// kilau matahari + refleksi panorama
+vec3 pbrSpecPass(sampler2D tex, vec2 dim, vec3 col, vec3 Vv, vec3 Nn, vec3 Ld, vec3 sunCol, float sunAmt, vec3 ambCol, vec4 spec, vec3 tint, float refl) {
+    float f0 = spec.g * 0.98 + 0.02;
+    float g = clamp(nlPbrGGX(Vv, Ld, Nn, spec.r, f0, 0.05), 0.0, NL_PBR_SPEC_MAX);
+#if defined(NL_PBR_FAKE_TERRAIN)
+    if (refl > 0.001) {
+        vec4 pano = nlPbrFakeTerrain(tex, dim, reflect(-Vv, Nn));
+        col = mix(col, pano.rgb * ambCol * tint, saturate(pano.a * refl));
+        g *= 1.0 - pano.a * (1.0 - spec.r);
+    }
+#endif
+    return col + sunCol * (g * sunAmt * NL_PBR_SPEC_KUAT) * tint;
+}
 #endif
 
 //warna terrain dimensi End
@@ -375,7 +556,11 @@ vec2 sheetLocal(vec3 pp, vec3 nn, vec2 uv) {
 void main() {
 #if defined(DEPTH_ONLY) || defined(DEPTH_ONLY_OPAQUE) || defined(DEPTH_ONLY_ALPHA_TEST)
     #if defined(ALPHA_TEST)
-    vec4 diffuse = texture2D(s_MatTexture, v_texcoord0);
+    vec2 uvD = v_texcoord0;
+    #if defined(PBR_ON)
+    uvD = pbrAlbedoUV(v_texcoord0, vec2(textureSize(s_MatTexture, 0)));
+    #endif
+    vec4 diffuse = texture2D(s_MatTexture, uvD);
     if (diffuse.a < 0.5) {
         discard;
     }
@@ -390,8 +575,7 @@ void main() {
     vec2 sheetLoc = vec2(0.0, 0.0);
     vec4 sheetData = vec4(0.0, 0.0, 0.0, 0.0);
     vec3 sheetEmi = vec3(0.0, 0.0, 0.0);
-    vec3 sheetNrm = vec3(0.5, 0.5, 1.0);
-#if defined(KODE_EXTRA) && (defined(OPAQUE) || defined(ALPHA_TEST))
+#if defined(KODE_EXTRA) && (defined(OPAQUE) || defined(ALPHA_TEST)) && !defined(PBR_ON)
     vec3 sheetNg = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
     sheetLoc = min(sheetLocal(p.xyz, sheetNg, v_texcoord0), vec2(0.999, 0.999));
     vec4 sheetRaw = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
@@ -404,10 +588,88 @@ void main() {
         vec2 sheetExt = vec2(SHEET_PX, SHEET_PX) / sheetAtlas;
         vec2 sheetOrg = v_texcoord0 - sheetLoc * sheetExt;
         uvS = sheetOrg + sheetLoc * 0.5 * sheetExt;
-        sheetNrm = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.5, 0.0) + sheetLoc * 0.5) * sheetExt, 0.0).rgb;
         sheetData = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.0, 0.5) + sheetLoc * 0.5) * sheetExt, 0.0);
         sheetEmi = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.5, 0.5) + sheetLoc * 0.5) * sheetExt, 0.0).rgb;
     }
+#endif
+
+#if defined(PBR_ON)
+    //pbr
+    highp vec2 pDim = vec2(textureSize(s_MatTexture, 0));
+    highp float pSlice = NL_PBR_TILE_SIZE * 0.5;
+    highp vec2 pFrac = fract(v_texcoord0 * (pDim / NL_PBR_TILE_SIZE));
+    highp vec2 pOrg = round(v_texcoord0 * pDim - pFrac * NL_PBR_TILE_SIZE);
+    highp vec3 pWp = v_worldPos;
+    highp vec3 pGPos = pWp + CameraPosition.xyz;
+    float pCam = length(pWp);
+    vec3 pVd = normalize(pWp);
+
+    bool pWater = false;
+  #if defined(TRANSPARENT) && !defined(SEASONS)
+    pWater = (v_color0.b > v_color0.g || v_color0.b > v_color0.r);
+  #endif
+
+    //tangent basis
+    highp vec3 pDpx = dFdx(pWp);
+    highp vec3 pDpy = dFdy(pWp);
+    vec3 pbrNg = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
+    vec2 pSt1 = dFdx(v_texcoord0);
+    vec2 pSt2 = dFdy(v_texcoord0);
+    vec3 pDp2 = cross(pDpy, pbrNg);
+    vec3 pDp1 = cross(pbrNg, pDpx);
+    vec3 pT = pDp2 * pSt1.x + pDp1 * pSt2.x;
+    vec3 pB = pDp2 * pSt1.y + pDp1 * pSt2.y;
+    float pInv = inversesqrt(max(max(dot(pT, pT), dot(pB, pB)), 0.000000001));
+
+    //mip level
+    highp vec2 pGx = pSt1 * pDim * 0.5;
+    highp vec2 pGy = pSt2 * pDim * 0.5;
+    float pMip = 0.5 * log2(max(max(dot(pGx, pGx), dot(pGy, pGy)), 1.0));
+    pMip = clamp(pMip + NL_PBR_MIP_BIAS, 0.0, 6.0);
+
+    //parallax
+  #if defined(NL_PBR_PARALLAX) && !defined(ALPHA_TEST) && !defined(TRANSPARENT)
+    {
+        float pxFade = clamp(1.0 - pCam / NL_PBR_PARALLAX_DIST, 0.0, 1.0);
+        if (pxFade > 0.0) {
+            vec3 viewV = -pVd;
+            vec3 viewT = vec3(dot(viewV, normalize(pT)), dot(viewV, normalize(pB)), max(dot(viewV, pbrNg), 0.2));
+            vec2 pxDelta = viewT.xy / viewT.z * (NL_PBR_PARALLAX_SCALE * pxFade);
+            float pxLayer = 1.0 / float(NL_PBR_PARALLAX_STEPS);
+            float pxCur = 0.0;
+            highp vec2 pxUv = pFrac;
+            highp vec2 pxClamp = clamp(pxUv, vec2(0.002, 0.002), vec2(0.998, 0.998));
+            float pxDepth = 1.0 - texture2DLod(s_MatTexture, (pOrg + vec2(pSlice, 0.0) + pxClamp * pSlice) / pDim, pMip).a;
+            for (int i = 0; i < NL_PBR_PARALLAX_STEPS; i++) {
+                if (pxCur >= pxDepth) {
+                    break;
+                }
+                pxUv -= pxDelta * pxLayer;
+                pxCur += pxLayer;
+                pxClamp = clamp(pxUv, vec2(0.002, 0.002), vec2(0.998, 0.998));
+                pxDepth = 1.0 - texture2DLod(s_MatTexture, (pOrg + vec2(pSlice, 0.0) + pxClamp * pSlice) / pDim, pMip).a;
+            }
+            pFrac = clamp(pxUv, vec2(0.002, 0.002), vec2(0.998, 0.998));
+        }
+    }
+  #endif
+    highp vec2 pSliceUv = pOrg + pFrac * pSlice;
+    uvS = pSliceUv / pDim;
+
+    vec3 pNrm = texture2DLod(s_MatTexture, (pSliceUv + vec2(pSlice, 0.0)) / pDim, pMip).rgb * 2.0 - 1.0;
+    vec4 pSpec = texture2DLod(s_MatTexture, (pSliceUv + vec2(0.0, pSlice)) / pDim, pMip);
+    vec4 pSubs = texture2DLod(s_MatTexture, (pSliceUv + vec2(pSlice, pSlice)) / pDim, pMip);
+    pNrm.xy *= NL_PBR_NORMAL_STRENGTH * NL_PBR_NORMAL_FLIP;
+    pNrm.z = max(pNrm.z, 0.2);
+    pNrm = normalize(pNrm);
+
+    //air
+    if (pWater) {
+        pSpec = vec4(NL_PBR_WATER_ROUGH, 0.0, 1.0, 1.0);
+        pSubs = vec4(0.0, 0.0, 0.0, 1.0);
+        pNrm = nlPbrWaterNormal(s_MatTexture, pDim, pGPos, ViewPositionAndTime.w);
+    }
+    vec3 pbrN = normalize(pT * pInv * pNrm.x + pB * pInv * pNrm.y + pbrNg * pNrm.z);
 #endif
     vec4 diffuse = texture2D(s_MatTexture, uvS);
 
@@ -462,6 +724,9 @@ void main() {
     }
 #endif
 
+#if defined(PBR_ON)
+    vec3 pbrBase = diffuse.rgb;
+#endif
 #if defined(ALPHA_TEST) || (defined(OPAQUE) && !defined(SEASONS))
     float _endF = endFogAmt(v_fog);
     vec2 _lmUV = v_lightmapUV;
@@ -480,6 +745,13 @@ void main() {
     _lmUV2.x = lightFalloff(_lmUV2.x);
     diffuse.rgb *= texture2D(s_LightMapTexture, _lmUV2).rgb;
 #endif
+#if defined(PBR_ON)
+    {
+        float pAo = mix(1.0, pSpec.b, pSpec.b);
+        diffuse.rgb *= mix(1.0, mix(pAo, 1.0, 0.5 * v_lightmapUV.x), NL_PBR_AO_KUAT);
+        diffuse.rgb += pbrBase * (pSubs.g * 2.0 * NL_PBR_EMISSIVE);
+    }
+#endif
     diffuse.rgb = mix(diffuse.rgb, FogColor.rgb, v_fog.a);
 
 #if defined(KODE_EXTRA)
@@ -493,27 +765,10 @@ void main() {
     vec4 color = v_color0;
     vec4 kolor = v_color0;
 #endif
-    vec3 N = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
-
-    //normalmap
-#if defined(OPAQUE) || defined(ALPHA_TEST)
-    vec3 nmDpA = dFdx(p.xyz);
-    vec3 nmDpB = dFdy(p.xyz);
-    vec2 nmDlA = dFdx(sheetLoc);
-    vec2 nmDlB = dFdy(sheetLoc);
-    vec3 nmPerpB = cross(nmDpB, N);
-    vec3 nmPerpA = cross(N, nmDpA);
-    vec3 nmT = nmPerpB * nmDlA.x + nmPerpA * nmDlB.x;
-    vec3 nmB = nmPerpB * nmDlA.y + nmPerpA * nmDlB.y;
-    float nmInv = inversesqrt(max(max(dot(nmT, nmT), dot(nmB, nmB)), 0.000000000001));
-    nmT *= nmInv;
-    nmB *= nmInv;
-    vec3 nmN = sheetNrm * 2.0 - 1.0;
-    float nmFade = NORMAL_KUAT * (1.0 - smoothstep(NORMAL_JARAK * 0.5, NORMAL_JARAK, length(v_worldPos)));
-    vec3 nmWorld = normalize(nmT * nmN.x - nmB * nmN.y + N * max(nmN.z, 0.2));
-    if (sheetOn) {
-        N = normalize(mix(N, nmWorld, saturate(nmFade)));
-    }
+    vec3 Ng = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
+    vec3 N = Ng;
+#if defined(PBR_ON)
+    N = pbrN;
 #endif
     vec2 uv1 = v_lightmapUV;
     vec4 fclr = v_fog;
@@ -595,6 +850,33 @@ void main() {
     float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * wk * (1.0 - wk)) * soreHujan;
     vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT * soreWin);
 
+#if defined(PBR_ON)
+    //pbr cahaya
+    vec3 pbrL;
+    {
+        float pbrAng = (TimeOfDay.x + NL_PBR_SUN_PHASE) * 6.2831853;
+        vec3 pbrLs = vec3(-sin(pbrAng), cos(pbrAng), 0.2);
+        pbrLs *= (pbrLs.y >= 0.0) ? 1.0 : -1.0;
+        pbrL = normalize(pbrLs * NL_PBR_SUN_FLIP);
+    }
+    float pbrDayK = smoothstep(0.05, 0.4, wk);
+    float pbrSunAmt = mix(0.25, 1.0, pbrDayK) * clamp((uv1.y - 0.8751) * 50.0, 0.0, 1.0) * (1.0 - sqrt(hujand)) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw);
+    vec3 pbrSunCol = mix(vec3(0.55, 0.65, 1.0) * 0.25, vec3(1.0, 0.93, 0.78), pbrDayK);
+    pbrSunCol = mix(pbrSunCol, SORE_WARNA, saturate(duskW * SORE_KUAT * soreWin));
+    vec3 pbrAmb = pbrSunCol * 0.25 + mix(vec3(0.04, 0.06, 0.12), vec3(0.45, 0.7, 1.0), pbrDayK) * 0.4;
+    float pbrFr = nlPbrFresnel(N, V, pSpec.rgb) * NL_PBR_REFL_KUAT;
+
+    //pbr relief
+    float pbrNdL = saturate(dot(N, pbrL));
+    float pbrNgL = saturate(dot(Ng, pbrL));
+    float pbrRelSun = (NL_PBR_RELIEF_SUN + pbrNdL) / (NL_PBR_RELIEF_SUN + pbrNgL);
+    float pbrNdU = clamp(N.y * NL_PBR_AMBIENT_RELIEF + (1.0 - NL_PBR_AMBIENT_RELIEF), 0.0, 1.0);
+    float pbrNgU = clamp(Ng.y * NL_PBR_AMBIENT_RELIEF + (1.0 - NL_PBR_AMBIENT_RELIEF), 0.0, 1.0);
+    float pbrRelAmb = pbrNdU / max(pbrNgU, 0.05);
+    float pbrRel = mix(1.0, pbrRelSun, saturate(pbrSunAmt * NL_PBR_RELIEF_KUAT)) * mix(1.0, pbrRelAmb, NL_PBR_RELIEF_AMB);
+    pbrRel = clamp(pbrRel, 0.5, 1.6);
+#endif
+
 #if defined(OPAQUE)
     float dudan = smoothstep(0.55, 0.1, fctl.r) * uv1.y;
 
@@ -609,6 +891,10 @@ void main() {
     _finalColor.xyz *= mix(vec3_splat(1.0), SORE_WARNA, duskW * SORE_KUAT * soreWin);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(1.0, 0.0, 0.0), sunFace * sunDbg);
     _finalColor.xyz = mix(_finalColor.xyz, vec3(0.0, 0.0, 1.0), sunDark * sunDbg);
+
+#if defined(PBR_ON)
+    _finalColor.rgb *= pbrRel;
+#endif
 
     //coloring, saturation and tonemapping
     if (!akhir) {
@@ -646,6 +932,9 @@ void main() {
 
     //metalic
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > 0.5);
+#if defined(PBR_ON)
+    metalic = metalic || (pbrFr > 0.05);
+#endif
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
@@ -653,6 +942,9 @@ void main() {
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
         vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+#if defined(PBR_ON)
+        fr = vec3_splat(pbrFr);
+#endif
 
         //lantai
         if (N.y > 0.5) {
@@ -694,8 +986,24 @@ void main() {
             }
         }
 
+#if defined(PBR_ON)
+        {
+            vec3 pbrTint = saturate(pbrBase / max(max(pbrBase.r, max(pbrBase.g, pbrBase.b)), 0.001));
+            _finalColor.rgb = sebelumMetal + (_finalColor.rgb - sebelumMetal) * mix(vec3_splat(1.0), pbrTint, pSpec.g);
+        }
+#endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
+
+#if defined(PBR_ON)
+    {
+        //pbr kilau + panorama
+        float pbrGate = saturate(uv1.y * uv1.y) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir);
+        vec3 pbrMet = saturate(pbrBase / max(max(pbrBase.r, max(pbrBase.g, pbrBase.b)), 0.001));
+        pbrMet = mix(vec3_splat(1.0), pbrMet, pSpec.g);
+        _finalColor.rgb = pbrSpecPass(s_MatTexture, pDim, _finalColor.rgb, V, N, pbrL, pbrSunCol, pbrSunAmt, pbrAmb, pSpec, pbrMet, pbrFr * pbrGate);
+    }
+#endif
 
     //hujan
     if (!(udw && nether && akhir)) {
@@ -739,7 +1047,11 @@ void main() {
         float lit = smoothstep(skyMax - 0.24, skyMax - 0.02, uv1.y);
         float cmask = inWater * lit * (1.0 - saturate(lenKs / 20.0));
         if (cmask > 0.001) {
+#if defined(PBR_ON) && defined(NL_PBR_ATLAS_CAUSTIC)
+            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * (dot(nlPbrCaustic(s_MatTexture, pDim, pGPos, pbrL), vec3_splat(0.33333)) / 11.5) * NL_PBR_CAUSTIC_KUAT * cmask;
+#else
             _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
+#endif
         }
     }
 
@@ -792,6 +1104,10 @@ void main() {
         _finalColor.xyz = Tm(_finalColor.xyz);
     }
 
+#if defined(PBR_ON)
+    _finalColor.rgb *= pbrRel;
+#endif
+
     //dirlight
     if (!(kolor.g > kolor.r)) {
         float dir = max(N.x, -N.z);
@@ -831,6 +1147,9 @@ void main() {
 
     //metalic
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > 0.5);
+#if defined(PBR_ON)
+    metalic = metalic || (pbrFr > 0.05);
+#endif
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
@@ -838,6 +1157,9 @@ void main() {
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
         vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+#if defined(PBR_ON)
+        fr = vec3_splat(pbrFr);
+#endif
 
         //lantai
         if (N.y > 0.5) {
@@ -878,8 +1200,24 @@ void main() {
             }
         }
 
+#if defined(PBR_ON)
+        {
+            vec3 pbrTint = saturate(pbrBase / max(max(pbrBase.r, max(pbrBase.g, pbrBase.b)), 0.001));
+            _finalColor.rgb = sebelumMetal + (_finalColor.rgb - sebelumMetal) * mix(vec3_splat(1.0), pbrTint, pSpec.g);
+        }
+#endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
+
+#if defined(PBR_ON)
+    {
+        //pbr kilau + panorama
+        float pbrGate = saturate(uv1.y * uv1.y) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir);
+        vec3 pbrMet = saturate(pbrBase / max(max(pbrBase.r, max(pbrBase.g, pbrBase.b)), 0.001));
+        pbrMet = mix(vec3_splat(1.0), pbrMet, pSpec.g);
+        _finalColor.rgb = pbrSpecPass(s_MatTexture, pDim, _finalColor.rgb, V, N, pbrL, pbrSunCol, pbrSunAmt, pbrAmb, pSpec, pbrMet, pbrFr * pbrGate);
+    }
+#endif
 
     //end
     if (akhir) {
@@ -907,7 +1245,11 @@ void main() {
         float lit = smoothstep(skyMax - 0.24, skyMax - 0.02, uv1.y);
         float cmask = inWater * lit * (1.0 - saturate(lenKs / 20.0));
         if (cmask > 0.001) {
+#if defined(PBR_ON) && defined(NL_PBR_ATLAS_CAUSTIC)
+            _finalColor.rgb += vec3(0.6, 0.9, 1.0) * (dot(nlPbrCaustic(s_MatTexture, pDim, pGPos, pbrL), vec3_splat(0.33333)) / 11.5) * NL_PBR_CAUSTIC_KUAT * cmask;
+#else
             _finalColor.rgb += vec3(0.6, 0.9, 1.0) * causticRay(p, N) * 0.35 * cmask;
+#endif
         }
     }
 
@@ -1043,6 +1385,9 @@ void main() {
         if (N.y > 0.5 && !udw) {
             float awDy = AWAN_AIR_TINGGI / sqrt(dot(wp.xz, wp.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
             vec2 awBase = vec2(AWAN_SX * wp.x, AWAN_SZ * wp.z) / AWAN_AIR_TINGGI + wave * 0.05;
+#if defined(PBR_ON)
+            awBase += (N.xz - Ng.xz) * 0.3;
+#endif
             float awDh = bayer8(gl_FragCoord.xy);
             float awShd = 0.0;
             float awMm = 1.0;
@@ -1063,6 +1408,15 @@ void main() {
 
         //fresnel air
         _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
+#if defined(PBR_ON)
+        {
+            //kilau matahari di air
+            float pbrGl = clamp(nlPbrGGX(V, pbrL, N, NL_PBR_WATER_ROUGH, 0.02, 0.05), 0.0, NL_PBR_SPEC_MAX);
+            vec3 pbrGlC = pbrSunCol * (pbrGl * pbrSunAmt * NL_PBR_SPEC_KUAT);
+            _finalColor.rgb += pbrGlC;
+            _finalColor.a = max(_finalColor.a, saturate(dot(pbrGlC, vec3_splat(0.6667))));
+        }
+#endif
 
         //bintang di air
         vec2 sg = p.xz * 5.0 + wave * 0.15;
