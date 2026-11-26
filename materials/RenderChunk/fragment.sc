@@ -16,6 +16,7 @@ uniform vec4 FogAndDistanceControl;
 #define NORMALMAP_FLIP vec2(1.0, 1.0)
 #define NORMALMAP_SLICE vec2(0.5, 0.0)
 #define NORMALMAP_TBN 0
+#define NORMALMAP_SKY_KUAT 1.0
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
 #define SNELL_DISTORSI 0.02
@@ -373,8 +374,24 @@ vec3 tbn_frame(vec3 T, vec3 B, vec3 N, vec3 normalmap) {
     return T * normalmap.x + B * normalmap.y + N * normalmap.z;
 }
 
+//tangent sumbu (gaya Nori)
+vec3 tangentSumbu(vec3 nn) {
+    vec3 t = vec3(1.0, 0.0, 0.0);
+    if (nn.x > 0.0) {
+        t = vec3(0.0, 0.0, -1.0);
+    } else if (-nn.x > 0.0) {
+        t = vec3(0.0, 0.0, 1.0);
+    } else if (nn.z < 0.0) {
+        t = vec3(-1.0, 0.0, 0.0);
+    }
+    return t;
+}
+
 //normalmap
 vec3 normalmapDecode(vec4 tex) {
+    if (tex.r <= 0.0 && tex.g <= 0.0 && tex.b <= 0.0) {
+        tex.rgb = vec3(0.5, 0.5, 1.0);
+    }
     vec3 nm = tex.rgb * 2.0 - 1.0;
     nm.xy *= NORMALMAP_KUAT * NORMALMAP_FLIP;
     nm.z = max(nm.z, 0.2);
@@ -382,7 +399,7 @@ vec3 normalmapDecode(vec4 tex) {
 }
 
 vec3 normalmapN(vec3 N, vec3 T, vec3 B, vec3 normalmap) {
-#if NORMALMAP_TBN
+#if NORMALMAP_TBN > 0
     return normalize(tbn_frame(T, B, N, normalmap));
 #else
     return normalize(cotangent_frame(N, normalmap));
@@ -533,7 +550,10 @@ void main() {
     vec3 N = Ng;
     vec3 nmT = vec3(1.0, 0.0, 0.0);
     vec3 nmB = vec3(0.0, 0.0, 1.0);
-#if NORMALMAP_TBN
+#if NORMALMAP_TBN == 1
+    nmT = tangentSumbu(Ng);
+    nmB = normalize(cross(nmT, Ng));
+#elif NORMALMAP_TBN == 2
     {
         vec3 dp1 = dFdx(p.xyz);
         vec3 dp2 = dFdy(p.xyz);
@@ -695,11 +715,13 @@ void main() {
         }
         float NdotVm = max(0.001, dot(Nm, V));
         vec3 fr = fresnel(vec3_splat(0.3), NdotVm);
+        vec3 Rn = reflect(-V, N);
+        vec3 Rm = reflect(-V, Nm);
 
         //lantai
         if (N.y > 0.5) {
-            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 70.0)), fr), siangd * (1.0 - hujand));
-            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenKs / 70.0)), fr), sored * (1.0 - hujand));
+            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 70.0 + (Rn.y - Rm.y) * NORMALMAP_SKY_KUAT)), fr), siangd * (1.0 - hujand));
+            _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3(1.0, 0.8, 0.1), saturate(lenKs / 70.0 + (Rn.y - Rm.y) * NORMALMAP_SKY_KUAT)), fr), sored * (1.0 - hujand));
 
             //awan ref
             if (!udw) {
@@ -715,9 +737,9 @@ void main() {
 
         //sisi
         if (max(abs(N.x), abs(N.z)) > 0.5) {
-            float awEl = wp.y / max(lenWp, 0.001);
+            float awEl = Rm.y;
             float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
-            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(wp.xz) / max(abs(wp.y), 0.1) * 0.1, 0.05, 0.7));
+            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(Rm.xz) / max(abs(Rm.y), 0.1 / max(lenWp, 0.001)) * 0.1, 0.05, 0.7));
             vec3 sisiBawah = vec3(212.0, 232.0, 255.0) / 255.0;
             _finalColor.rgb = mix(_finalColor.rgb, mix(sisiBawah, sisiAtas, awAtas), fr);
 
@@ -888,10 +910,12 @@ void main() {
         }
         float NdotVm = max(0.001, dot(Nm, V));
         vec3 fr = fresnel(vec3_splat(0.3), NdotVm);
+        vec3 Rn = reflect(-V, N);
+        vec3 Rm = reflect(-V, Nm);
 
         //lantai
         if (N.y > 0.5) {
-            _finalColor.rgb = mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 90.0)), fr);
+            _finalColor.rgb = mix(_finalColor.rgb, mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), saturate(lenKs / 90.0 + (Rn.y - Rm.y) * NORMALMAP_SKY_KUAT)), fr);
 
             //awan ref
             if (!udw) {
@@ -907,9 +931,9 @@ void main() {
 
         //sisi
         if (max(abs(N.x), abs(N.z)) > 0.5) {
-            float awEl = wp.y / max(lenWp, 0.001);
+            float awEl = Rm.y;
             float awAtas = smoothstep(-SISI_HALUS, SISI_HALUS, awEl);
-            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(wp.xz) / max(abs(wp.y), 0.1) * 0.1, 0.05, 0.7));
+            vec3 sisiAtas = mix(vec3(0.1, 0.5, 1.0) * 1.2, vec3_splat(1.1), clamp(length(Rm.xz) / max(abs(Rm.y), 0.1 / max(lenWp, 0.001)) * 0.1, 0.05, 0.7));
             vec3 sisiBawah = vec3(212.0, 232.0, 255.0) / 255.0;
             _finalColor.rgb = mix(_finalColor.rgb, mix(sisiBawah, sisiAtas, awAtas), fr);
 
