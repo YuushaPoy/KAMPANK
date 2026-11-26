@@ -8,6 +8,11 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
+#define SHEET_PENANDA 249
+#define SHEET_PX 32.0
+#define SHEET_ATLAS vec2(0.0, 0.0)
+#define NORMAL_KUAT 1.0
+#define NORMAL_JARAK 14.0
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
 #define SNELL_DISTORSI 0.02
@@ -349,6 +354,24 @@ float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
 #endif // ALPHA_TEST || OPAQUE || TRANSPARENT
 #endif // KODE_EXTRA
 
+//sheet
+vec2 sheetLocal(vec3 pp, vec3 nn, vec2 uv) {
+    vec3 an = abs(nn);
+    vec2 w = (an.y > 0.5) ? pp.xz : ((an.x > 0.5) ? vec2(pp.z, pp.y) : vec2(pp.x, pp.y));
+    vec2 dwx = dFdx(w);
+    vec2 dwy = dFdy(w);
+    float cuA = dFdx(uv.x) * dwx.x + dFdy(uv.x) * dwy.x;
+    float cuB = dFdx(uv.x) * dwx.y + dFdy(uv.x) * dwy.y;
+    float cvA = dFdx(uv.y) * dwx.x + dFdy(uv.y) * dwy.x;
+    float cvB = dFdx(uv.y) * dwx.y + dFdy(uv.y) * dwy.y;
+    bool lurus = (abs(cuA) + abs(cvB)) >= (abs(cuB) + abs(cvA));
+    float su = lurus ? cuA : cuB;
+    float sv = lurus ? cvB : cvA;
+    float wu = lurus ? w.x : w.y;
+    float wv = lurus ? w.y : w.x;
+    return vec2(su >= 0.0 ? fract(wu) : fract(-wu), sv >= 0.0 ? fract(wv) : fract(-wv));
+}
+
 void main() {
 #if defined(DEPTH_ONLY) || defined(DEPTH_ONLY_OPAQUE) || defined(DEPTH_ONLY_ALPHA_TEST)
     #if defined(ALPHA_TEST)
@@ -361,7 +384,32 @@ void main() {
     return;
 #else
 
-    vec4 diffuse = texture2D(s_MatTexture, v_texcoord0);
+    //sheet
+    vec2 uvS = v_texcoord0;
+    bool sheetOn = false;
+    vec2 sheetLoc = vec2(0.0, 0.0);
+    vec4 sheetData = vec4(0.0, 0.0, 0.0, 0.0);
+    vec3 sheetEmi = vec3(0.0, 0.0, 0.0);
+    vec3 sheetNrm = vec3(0.5, 0.5, 1.0);
+#if defined(KODE_EXTRA) && (defined(OPAQUE) || defined(ALPHA_TEST))
+    vec3 sheetNg = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
+    sheetLoc = min(sheetLocal(p.xyz, sheetNg, v_texcoord0), vec2(0.999, 0.999));
+    vec4 sheetRaw = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
+    if (int(sheetRaw.w * 255.0 + 0.5) == SHEET_PENANDA) {
+        sheetOn = true;
+        vec2 sheetAtlas = vec2(textureSize(s_MatTexture, 0));
+        if (SHEET_ATLAS.x > 0.5) {
+            sheetAtlas = SHEET_ATLAS;
+        }
+        vec2 sheetExt = vec2(SHEET_PX, SHEET_PX) / sheetAtlas;
+        vec2 sheetOrg = v_texcoord0 - sheetLoc * sheetExt;
+        uvS = sheetOrg + sheetLoc * 0.5 * sheetExt;
+        sheetNrm = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.5, 0.0) + sheetLoc * 0.5) * sheetExt, 0.0).rgb;
+        sheetData = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.0, 0.5) + sheetLoc * 0.5) * sheetExt, 0.0);
+        sheetEmi = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.5, 0.5) + sheetLoc * 0.5) * sheetExt, 0.0).rgb;
+    }
+#endif
+    vec4 diffuse = texture2D(s_MatTexture, uvS);
 
 #if defined(ALPHA_TEST)
     bool ditherDiscard = false;
@@ -446,6 +494,27 @@ void main() {
     vec4 kolor = v_color0;
 #endif
     vec3 N = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
+
+    //normalmap
+#if defined(OPAQUE) || defined(ALPHA_TEST)
+    vec3 nmDpA = dFdx(p.xyz);
+    vec3 nmDpB = dFdy(p.xyz);
+    vec2 nmDlA = dFdx(sheetLoc);
+    vec2 nmDlB = dFdy(sheetLoc);
+    vec3 nmPerpB = cross(nmDpB, N);
+    vec3 nmPerpA = cross(N, nmDpA);
+    vec3 nmT = nmPerpB * nmDlA.x + nmPerpA * nmDlB.x;
+    vec3 nmB = nmPerpB * nmDlA.y + nmPerpA * nmDlB.y;
+    float nmInv = inversesqrt(max(max(dot(nmT, nmT), dot(nmB, nmB)), 0.000000000001));
+    nmT *= nmInv;
+    nmB *= nmInv;
+    vec3 nmN = sheetNrm * 2.0 - 1.0;
+    float nmFade = NORMAL_KUAT * (1.0 - smoothstep(NORMAL_JARAK * 0.5, NORMAL_JARAK, length(v_worldPos)));
+    vec3 nmWorld = normalize(nmT * nmN.x - nmB * nmN.y + N * max(nmN.z, 0.2));
+    if (sheetOn) {
+        N = normalize(mix(N, nmWorld, saturate(nmFade)));
+    }
+#endif
     vec2 uv1 = v_lightmapUV;
     vec4 fclr = v_fog;
     vec4 fctl = FogAndDistanceControl;
@@ -456,7 +525,11 @@ void main() {
     float lenWp = length(wp);
     vec3 V = normalize(-wp);
     float NdotV = max(0.001, dot(N, V));
-    vec4 oreTex = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
+    vec4 oreTex = texture2DLod(s_MatTexture, uvS, 0.0);
+    if (sheetOn) {
+        float sheetGlow = step(0.004, max(sheetEmi.r, max(sheetEmi.g, sheetEmi.b)));
+        oreTex = vec4(sheetEmi, mix(249.0, 252.0, sheetGlow) / 255.0);
+    }
 
     //detect
     float goa = smoothstep(0.5, 0.0, uv1.y);
@@ -519,7 +592,7 @@ void main() {
     float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskW;
     float sunDbg = step(0.5, SUN_DEBUG) * (1.0 - step(1.5, SUN_DEBUG));
     float soreHujan = (1.0 - smoothstep(0.0, 0.35, hujand)) * smoothstep(0.05, 0.2, max(fclr.r, max(fclr.g, fclr.b)) - min(fclr.r, min(fclr.g, fclr.b)));
-    float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * (1.0 - siangd) * (1.0 - malamd)) * soreHujan;
+    float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * wk * (1.0 - wk)) * soreHujan;
     vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT * soreWin);
 
 #if defined(OPAQUE)
@@ -572,7 +645,7 @@ void main() {
 #endif
 
     //metalic
-    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
+    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > 0.5);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
@@ -757,7 +830,7 @@ void main() {
 #endif
 
     //metalic
-    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250);
+    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > 0.5);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
