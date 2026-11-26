@@ -11,6 +11,11 @@ uniform vec4 FogAndDistanceControl;
 #define SHEET_PENANDA 249
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
+//normalmap metalic
+#define NORMALMAP_KUAT 1.0
+#define NORMALMAP_FLIP vec2(1.0, 1.0)
+#define NORMALMAP_SLICE vec2(0.5, 0.0)
+#define NORMALMAP_TBN 0
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
 #define SNELL_DISTORSI 0.02
@@ -355,6 +360,35 @@ float godRayFog(vec3 pp, vec3 ww, vec2 fc) {
 #endif // ALPHA_TEST || OPAQUE || TRANSPARENT
 #endif // KODE_EXTRA
 
+//cotangent
+vec3 cotangent_frame(vec3 N, vec3 normalmap) {
+    float a = abs(N.y) + N.z;
+    return vec3(normalmap.x * a + normalmap.z * N.x,
+                normalmap.z * N.y,
+                -normalmap.x * N.x + normalmap.y * N.y + normalmap.z * N.z);
+}
+
+//tbn
+vec3 tbn_frame(vec3 T, vec3 B, vec3 N, vec3 normalmap) {
+    return T * normalmap.x + B * normalmap.y + N * normalmap.z;
+}
+
+//normalmap
+vec3 normalmapDecode(vec4 tex) {
+    vec3 nm = tex.rgb * 2.0 - 1.0;
+    nm.xy *= NORMALMAP_KUAT * NORMALMAP_FLIP;
+    nm.z = max(nm.z, 0.2);
+    return normalize(nm);
+}
+
+vec3 normalmapN(vec3 N, vec3 T, vec3 B, vec3 normalmap) {
+#if NORMALMAP_TBN
+    return normalize(tbn_frame(T, B, N, normalmap));
+#else
+    return normalize(cotangent_frame(N, normalmap));
+#endif
+}
+
 //sheet
 vec2 sheetLocal(vec3 pp, vec3 nn, vec2 uv) {
     vec3 an = abs(nn);
@@ -391,6 +425,7 @@ void main() {
     vec2 sheetLoc = vec2(0.0, 0.0);
     vec4 sheetData = vec4(0.0, 0.0, 0.0, 0.0);
     vec3 sheetEmi = vec3(0.0, 0.0, 0.0);
+    vec4 sheetNrm = vec4(0.5, 0.5, 1.0, 1.0);
 #if defined(KODE_EXTRA) && (defined(OPAQUE) || defined(ALPHA_TEST))
     vec3 sheetNg = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
     sheetLoc = min(sheetLocal(p.xyz, sheetNg, v_texcoord0), vec2(0.999, 0.999));
@@ -406,6 +441,7 @@ void main() {
         uvS = sheetOrg + sheetLoc * 0.5 * sheetExt;
         sheetData = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.0, 0.5) + sheetLoc * 0.5) * sheetExt, 0.0);
         sheetEmi = texture2DLod(s_MatTexture, sheetOrg + (vec2(0.5, 0.5) + sheetLoc * 0.5) * sheetExt, 0.0).rgb;
+        sheetNrm = texture2DLod(s_MatTexture, sheetOrg + (NORMALMAP_SLICE + sheetLoc * 0.5) * sheetExt, 0.0);
     }
 #endif
 
@@ -495,6 +531,23 @@ void main() {
 #endif
     vec3 Ng = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
     vec3 N = Ng;
+    vec3 nmT = vec3(1.0, 0.0, 0.0);
+    vec3 nmB = vec3(0.0, 0.0, 1.0);
+#if NORMALMAP_TBN
+    {
+        vec3 dp1 = dFdx(p.xyz);
+        vec3 dp2 = dFdy(p.xyz);
+        vec2 duv1 = dFdx(v_texcoord0);
+        vec2 duv2 = dFdy(v_texcoord0);
+        vec3 dp2perp = cross(dp2, Ng);
+        vec3 dp1perp = cross(Ng, dp1);
+        nmT = dp2perp * duv1.x + dp1perp * duv2.x;
+        nmB = dp2perp * duv1.y + dp1perp * duv2.y;
+        float invmax = inversesqrt(max(max(dot(nmT, nmT), dot(nmB, nmB)), 0.000000001));
+        nmT *= invmax;
+        nmB *= invmax;
+    }
+#endif
     vec2 uv1 = v_lightmapUV;
     vec4 fclr = v_fog;
     vec4 fctl = FogAndDistanceControl;
@@ -634,7 +687,14 @@ void main() {
     float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
-        vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+
+        //normalmap
+        vec3 Nm = N;
+        if (sheetOn) {
+            Nm = normalmapN(N, nmT, nmB, normalmapDecode(sheetNrm));
+        }
+        float NdotVm = max(0.001, dot(Nm, V));
+        vec3 fr = fresnel(vec3_splat(0.3), NdotVm);
 
         //lantai
         if (N.y > 0.5) {
@@ -643,7 +703,7 @@ void main() {
 
             //awan ref
             if (!udw) {
-                vec3 awRv = reflect(wp, N);
+                vec3 awRv = reflect(wp, Nm);
                 if (awRv.y > 0.0) {
                     float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
                     float awMask = awanRefMetal(awRv.xz, 0.04, gl_FragCoord.xy) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
@@ -668,7 +728,7 @@ void main() {
 
         //awan ref
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
-            vec3 awR = reflect(-V, N);
+            vec3 awR = reflect(-V, Nm);
             if (awR.y > 0.0) {
                 float awMask = awanRef(awR, AWAN_SPEED_DINDING, gl_FragCoord.xy);
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
@@ -820,7 +880,14 @@ void main() {
     float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
-        vec3 fr = fresnel(vec3_splat(0.3), NdotV);
+
+        //normalmap
+        vec3 Nm = N;
+        if (sheetOn) {
+            Nm = normalmapN(N, nmT, nmB, normalmapDecode(sheetNrm));
+        }
+        float NdotVm = max(0.001, dot(Nm, V));
+        vec3 fr = fresnel(vec3_splat(0.3), NdotVm);
 
         //lantai
         if (N.y > 0.5) {
@@ -828,7 +895,7 @@ void main() {
 
             //awan ref
             if (!udw) {
-                vec3 awRv = reflect(wp, N);
+                vec3 awRv = reflect(wp, Nm);
                 if (awRv.y > 0.0) {
                     float awDy = AWAN_AIR_TINGGI / sqrt(dot(awRv.xz, awRv.xz) + AWAN_AIR_TINGGI * AWAN_AIR_TINGGI);
                     float awMask = awanRefMetal(awRv.xz, 0.04, gl_FragCoord.xy) * smoothstep(0.0, 0.12, awDy) * AWAN_METAL_KUAT;
@@ -853,7 +920,7 @@ void main() {
 
         //awan ref
         if (wp.y > -0.05 && !udw && max(abs(N.x), abs(N.z)) > 0.5) {
-            vec3 awR = reflect(-V, N);
+            vec3 awR = reflect(-V, Nm);
             if (awR.y > 0.0) {
                 float awMask = awanRef(awR, AWAN_SPEED_DINDING, gl_FragCoord.xy);
                 vec3 awHasil = mix(_finalColor.rgb, vec3_splat(1.0), awMask);
