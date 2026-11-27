@@ -19,7 +19,7 @@ uniform vec4 FogAndDistanceControl;
 #define NORMALMAP_KUAT 0.1
 //specular matahari persegi (pantulan matahari ala Minecraft di metal, kaca, es, air)
 #define SPEC_SUN_AKTIF 1            // 0 = matikan
-#define SPEC_SUN_KUAT 0.9           // terang/opasitas pantulan matahari (makin kecil makin transparan)
+#define SPEC_SUN_KUAT 0.73           // terang/opasitas pantulan matahari (makin kecil makin transparan)
 #define SPEC_SUN_UKURAN 0.18        // setengah lebar persegi (tangen sudut). matahari MC asli sekitar 0.15
 #define SPEC_SUN_LEMBUT 0.6         // kelembutan tepi (0 = tajam)
 #define SPEC_SUN_TINGGI 0.85        // ketinggian matahari siang (komponen y, 0..1)
