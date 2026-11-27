@@ -11,6 +11,7 @@ SAMPLER2D_AUTOREG(s_MatTexture);
 
 void main() {
     vec4 diffuse = texture2D(s_MatTexture, v_texcoord0);
+    bool dbgSheet = int(diffuse.a * 255.0 + 0.5) == 249;
 
 #ifdef MULTI_COLOR_TINT
     vec2 colorMask = diffuse.rg;
@@ -35,5 +36,8 @@ void main() {
     diffuse *= TintColor;
     diffuse = applyHudOpacity(diffuse, HudOpacity);
 
+    if (dbgSheet) {
+        diffuse = vec4(1.0, 1.0, 0.0, 1.0);
+    }
     gl_FragColor = diffuse;
 }
