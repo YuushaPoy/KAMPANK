@@ -9,3 +9,4 @@ vec4          v_fog          : COLOR2;
 vec4          v_light        : COLOR1;
 centroid vec2 v_texCoords    : TEXCOORD0;
 vec3          v_worldPos     : TEXCOORD3;
+vec3 v_corner : TEXCOORD4;
