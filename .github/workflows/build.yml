@@ -31,8 +31,8 @@ jobs:
           call build.bat Sky multiplatform
           call build.bat Actor multiplatform
           call build.bat SunMoon multiplatform
-          call build.bat ItemInHandTextured
-          call build.bat SingleBlock
+          call build.bat ItemInHandTextured multiplatform
+          call build.bat SingleBlock multiplatform
 
       - name: Upload Compiled Shaders
         uses: actions/upload-artifact@v4
