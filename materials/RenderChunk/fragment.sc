@@ -16,11 +16,11 @@ uniform vec4 FogAndDistanceControl;
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
 //normalmap metalic
-#define NORMALMAP_KUAT 0.3
+#define NORMALMAP_KUAT 0.2
 #define NORMALMAP_FLIP vec2(1.0, 1.0)
 #define NORMALMAP_SLICE vec2(0.5, 0.0)
 #define NORMALMAP_TBN 0
-#define NORMALMAP_SKY_KUAT 1.0
+#define NORMALMAP_SKY_KUAT 0.2
 #define METAL_MIN 0.02
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
