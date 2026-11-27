@@ -12,11 +12,12 @@ uniform vec4 FogAndDistanceControl;
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
 //normalmap metalic
-#define NORMALMAP_KUAT 0.2
+#define NORMALMAP_KUAT 1.0
 #define NORMALMAP_FLIP vec2(1.0, 1.0)
 #define NORMALMAP_SLICE vec2(0.5, 0.0)
 #define NORMALMAP_TBN 0
-#define NORMALMAP_SKY_KUAT 0.2
+#define NORMALMAP_SKY_KUAT 1.0
+#define METAL_MIN 0.02
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
 #define SNELL_DISTORSI 0.02
@@ -700,7 +701,8 @@ void main() {
 #endif
 
     //metalic
-    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > 0.5);
+    float metalAmt = sheetOn ? saturate(sheetData.g) : 1.0;
+    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > METAL_MIN);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
@@ -714,7 +716,7 @@ void main() {
             Nm = normalmapN(N, nmT, nmB, normalmapDecode(sheetNrm));
         }
         float NdotVm = max(0.001, dot(Nm, V));
-        vec3 fr = fresnel(vec3_splat(0.3), NdotVm);
+        vec3 fr = fresnel(vec3_splat(0.3), NdotVm) * metalAmt;
         vec3 Rn = reflect(-V, N);
         vec3 Rm = reflect(-V, Nm);
 
@@ -895,7 +897,8 @@ void main() {
 #endif
 
     //metalic
-    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > 0.5);
+    float metalAmt = sheetOn ? saturate(sheetData.g) : 1.0;
+    bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > METAL_MIN);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
@@ -909,7 +912,7 @@ void main() {
             Nm = normalmapN(N, nmT, nmB, normalmapDecode(sheetNrm));
         }
         float NdotVm = max(0.001, dot(Nm, V));
-        vec3 fr = fresnel(vec3_splat(0.3), NdotVm);
+        vec3 fr = fresnel(vec3_splat(0.3), NdotVm) * metalAmt;
         vec3 Rn = reflect(-V, N);
         vec3 Rm = reflect(-V, Nm);
 
