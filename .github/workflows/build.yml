@@ -34,6 +34,7 @@ jobs:
           call build.bat ItemInHandTextured multiplatform
           call build.bat SingleBlock multiplatform
           call build.bat MeshFallbackPosUVNormalColor multiplatform
+          call build.bat UISprite multiplatform
 
       - name: Upload Compiled Shaders
         uses: actions/upload-artifact@v4
