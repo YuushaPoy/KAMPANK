@@ -8,6 +8,7 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
+#define SHEET_AKTIF 1   // 0 = matikan seluruh blok sheet (tes bisect)
 #define SHEET_PENANDA 249
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
@@ -209,7 +210,7 @@ float bayer8(vec2 a) {
 }
 
 vec3 fresnel(vec3 f0, float NdotV) {
-    return f0 + (1.0 - f0) * pow(1.0 - NdotV, 5.0);
+    return f0 + (1.0 - f0) * pow(saturate(1.0 - NdotV), 5.0);
 }
 
 float genangan(vec2 q) {
@@ -444,7 +445,7 @@ void main() {
     vec4 sheetData = vec4(0.0, 0.0, 0.0, 0.0);
     vec3 sheetEmi = vec3(0.0, 0.0, 0.0);
     vec4 sheetNrm = vec4(0.5, 0.5, 1.0, 1.0);
-#if defined(KODE_EXTRA) && (defined(OPAQUE) || defined(ALPHA_TEST))
+#if SHEET_AKTIF && defined(KODE_EXTRA) && (defined(OPAQUE) || defined(ALPHA_TEST))
     vec3 sheetNg = normalize(cross(dFdx(p.xyz), dFdy(p.xyz)));
     sheetLoc = min(sheetLocal(p.xyz, sheetNg, v_texcoord0), vec2(0.999, 0.999));
     vec4 sheetRaw = texture2DLod(s_MatTexture, v_texcoord0, 0.0);
@@ -578,7 +579,7 @@ void main() {
     float lenKs = length(-ks);
     float lenWp = length(wp);
     vec3 V = normalize(-wp);
-    float NdotV = max(0.001, dot(N, V));
+    float NdotV = clamp(dot(N, V), 0.001, 1.0);
     vec4 oreTex = texture2DLod(s_MatTexture, uvS, 0.0);
     if (sheetOn) {
         float sheetGlow = step(0.004, max(sheetEmi.r, max(sheetEmi.g, sheetEmi.b)));
@@ -715,7 +716,7 @@ void main() {
         if (sheetOn) {
             Nm = normalmapN(N, nmT, nmB, normalmapDecode(sheetNrm));
         }
-        float NdotVm = max(0.001, dot(Nm, V));
+        float NdotVm = clamp(dot(Nm, V), 0.001, 1.0);
         vec3 fr = fresnel(vec3_splat(0.3), NdotVm) * metalAmt;
         vec3 Rn = reflect(-V, N);
         vec3 Rm = reflect(-V, Nm);
@@ -911,7 +912,7 @@ void main() {
         if (sheetOn) {
             Nm = normalmapN(N, nmT, nmB, normalmapDecode(sheetNrm));
         }
-        float NdotVm = max(0.001, dot(Nm, V));
+        float NdotVm = clamp(dot(Nm, V), 0.001, 1.0);
         vec3 fr = fresnel(vec3_splat(0.3), NdotVm) * metalAmt;
         vec3 Rn = reflect(-V, N);
         vec3 Rm = reflect(-V, Nm);
@@ -1275,6 +1276,15 @@ void main() {
     if (SUN_DEBUG > 1.5) {
         _finalColor.rgb = (SUN_DEBUG > 2.5) ? vec3_splat(FogColor.a) : FogColor.rgb;
     }
+
+#if defined(OPAQUE)
+    _finalColor.a = 1.0;
+#endif
+#if defined(OPAQUE) || defined(ALPHA_TEST)
+    if (any(isnan(_finalColor.rgb)) || any(isinf(_finalColor.rgb))) {
+        _finalColor.rgb = vec3_splat(0.0);
+    }
+#endif
 
     diffuse = _finalColor;
 #endif
