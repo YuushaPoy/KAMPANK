@@ -16,15 +16,24 @@ uniform vec4 FogAndDistanceControl;
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
 //normalmap metalic
-#define NORMALMAP_KUAT 0.2
+#define NORMALMAP_KUAT 1.0
+//specular matahari persegi (pantulan matahari ala Minecraft di metal, kaca, es, air)
+#define SPEC_SUN_AKTIF 1            // 0 = matikan
+#define SPEC_SUN_KUAT 2.0           // terang pantulan matahari
+#define SPEC_SUN_UKURAN 0.18        // setengah lebar persegi (tangen sudut). matahari MC asli sekitar 0.15
+#define SPEC_SUN_LEMBUT 0.25        // kelembutan tepi (0 = tajam)
+#define SPEC_SUN_TINGGI 0.85        // ketinggian matahari siang (komponen y, 0..1)
+#define SPEC_SUN_RENDAH 0.12        // ketinggian matahari saat fajar/senja
+#define SPEC_SUN_MANUAL vec3(0.0, 0.0, 0.0)  // isi arah matahari sendiri (mis. vec3(0.5,0.7,-0.5)); (0,0,0) = otomatis
+#define SPEC_AIR_RIPPLE 0.15        // seberapa bergelombang pantulan di air
 #define NORMALMAP_FLIP vec2(1.0, 1.0)
 #define NORMALMAP_SLICE vec2(0.5, 0.0)
 #define NORMALMAP_TBN 0
-#define NORMALMAP_SKY_KUAT 0.2
+#define NORMALMAP_SKY_KUAT 1.0
 #define METAL_MIN 0.02
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
-#define SNELL_DISTORSI 0.06
+#define SNELL_DISTORSI 0.02
 #define SNELL_INDEKS 1.333
 #define SNELL_LANGIT 1.0
 #define SNELL_PUTIH 0.3
@@ -393,6 +402,19 @@ vec3 tangentSumbu(vec3 nn) {
 }
 
 //normalmap
+float sunSpecMask(vec3 R, vec3 S, vec3 ax) {
+    float d = dot(R, S);
+    if (d <= 0.02) {
+        return 0.0;
+    }
+    vec3 v = normalize(cross(S, ax));
+    float a = dot(R, ax) / d;
+    float b = dot(R, v) / d;
+    float e = SPEC_SUN_UKURAN;
+    float w = e * SPEC_SUN_LEMBUT + 0.001;
+    return (1.0 - smoothstep(e - w, e + w, abs(a))) * (1.0 - smoothstep(e - w, e + w, abs(b)));
+}
+
 vec3 normalmapDecode(vec4 tex) {
     if (tex.r <= 0.0 && tex.g <= 0.0 && tex.b <= 0.0) {
         tex.rgb = vec3(0.5, 0.5, 1.0);
@@ -649,6 +671,17 @@ void main() {
     float sunFace = saturate(max(max(sunSide * N.x, -sunSide * N.z), N.y)) * duskW;
     float sunDark = saturate(max(max(-sunSide * N.x, sunSide * N.z), -N.y)) * duskW;
     float sunDbg = step(0.5, SUN_DEBUG) * (1.0 - step(1.5, SUN_DEBUG));
+#if SPEC_SUN_AKTIF
+    float specY = mix(SPEC_SUN_TINGGI, SPEC_SUN_RENDAH, duskW);
+    float specH = sqrt(max(1.0 - specY * specY, 0.0));
+    vec3 specS = normalize(vec3(0.7071 * sunSide * specH, specY, -0.7071 * sunSide * specH));
+    if (dot(SPEC_SUN_MANUAL, SPEC_SUN_MANUAL) > 0.01) {
+        specS = normalize(SPEC_SUN_MANUAL);
+    }
+    vec3 specAx = normalize(vec3(0.7071, 0.0, 0.7071));
+    vec3 specCol = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.6, 0.25), duskW) * SPEC_SUN_KUAT;
+    float specGate = smoothstep(0.15, 0.6, wk);
+#endif
     float soreHujan = (1.0 - smoothstep(0.0, 0.35, hujand)) * smoothstep(0.05, 0.2, max(fclr.r, max(fclr.g, fclr.b)) - min(fclr.r, min(fclr.g, fclr.b)));
     float soreWin = smoothstep(SORE_BATAS_A, SORE_BATAS_B, 4.0 * wk * (1.0 - wk)) * soreHujan;
     vec4 fogS = mix(v_fog, vec4(SORE_FOG_WARNA, v_fog.a), duskW * SORE_FOG_KUAT * soreWin);
@@ -764,6 +797,9 @@ void main() {
             }
         }
 
+#if SPEC_SUN_AKTIF
+        _finalColor.rgb += specCol * sunSpecMask(Rm, specS, specAx) * fr * specGate;
+#endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
 
@@ -974,6 +1010,9 @@ void main() {
             }
         }
 
+#if SPEC_SUN_AKTIF
+        _finalColor.rgb += specCol * sunSpecMask(Rm, specS, specAx) * fr * specGate;
+#endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
 
@@ -1089,6 +1128,9 @@ void main() {
                 _finalColor.rgb = mix(_finalColor.rgb, mix(_finalColor.rgb, vec3_splat(1.0), awMask), fr);
             }
         }
+#if SPEC_SUN_AKTIF
+        _finalColor.rgb += specCol * sunSpecMask(reflect(-V, N), specS, specAx) * fr * specGate;
+#endif
         _finalColor.rgb = mix(sebelumRef, _finalColor.rgb, refAktif);
     }
 
@@ -1159,6 +1201,19 @@ void main() {
 
         //fresnel air
         _finalColor.rgb += fresnel(f0, NdotV) * 0.7 * (1.0 - malamd);
+
+#if SPEC_SUN_AKTIF
+        if (N.y > 0.5 && !udw) {
+            float wRx = ombakAir(p.xz + vec2(0.06, 0.0), tm) * 0.85 - wave;
+            float wRz = ombakAir(p.xz + vec2(0.0, 0.06), tm) * 0.85 - wave;
+            vec3 Nw = normalize(vec3(-wRx, 0.06 / max(SPEC_AIR_RIPPLE, 0.001), -wRz));
+            float spW = sunSpecMask(reflect(-V, Nw), specS, specAx);
+            float spF = fresnel(vec3_splat(0.2), NdotV).x;
+            spW *= spF * specGate * (1.0 - hujand) * (1.0 - shadowAir / 0.65);
+            _finalColor.rgb += specCol * spW;
+            _finalColor.a = max(_finalColor.a, spW * 0.9);
+        }
+#endif
 
         //bintang di air
         vec2 sg = p.xz * 5.0 + wave * 0.15;
