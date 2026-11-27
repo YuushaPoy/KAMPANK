@@ -23,8 +23,7 @@ float bayer8(vec2 a) {
 #define UDW_WARNA vec3(0.02, 0.42, 0.38)
 #define UDW_SCATTER 6.0
 #define UDW_TERANG 2.0
-
-#define UDW_DEBUG 1   // 1 = layar dibagi 3 pita berisi nilai fog (untuk dibaca dari screenshot). set 0 setelah selesai
+#define UDW_RG_MAX 0.5   // fog underwater: merah/hijau di bawah ini (air ~0.15-0.33, langit malam/siang di luar air ~0.76-0.81)
 
 #define AWAN_BAYER 1
 #define AWAN_DITHER 0.02
@@ -87,7 +86,7 @@ void main() {
 
     //underwater
     bool nether = (fclr.r > fclr.b && fclr.r < 0.5 && fclr.b < 0.2);
-    bool udw = (FogAndDistanceControl.x < 0.01) && (fclr.b > fclr.r * 1.5) && (fclr.r < 0.35);
+    bool udw = (FogAndDistanceControl.x < 0.01) && (fclr.r < fclr.g * UDW_RG_MAX) && (fclr.b > fclr.g) && (fclr.r < 0.35);
     if (!(nether)) {
         if (udw) {
             float udwDay = smoothstep(0.03, 0.25, dot(fclr.rgb, vec3_splat(0.333)));
@@ -99,17 +98,5 @@ void main() {
     }
 #endif
 
-#if UDW_DEBUG && !defined(INSTANCING)
-    {
-        float dbgBand = floor(mod(gl_FragCoord.x / 120.0, 3.0));
-        if (dbgBand < 0.5) {
-            diffuse.rgb = fclr.rgb;                                                              // pita 1: FogColor
-        } else if (dbgBand < 1.5) {
-            diffuse.rgb = vec3(FogAndDistanceControl.x, FogAndDistanceControl.y, saturate(FogAndDistanceControl.z / 256.0)); // pita 2: fog x, y, z/256
-        } else {
-            diffuse.rgb = v_color0.rgb;                                                          // pita 3: warna sky (SkyColor di puncak langit)
-        }
-    }
-#endif
     gl_FragColor = diffuse;
 }
