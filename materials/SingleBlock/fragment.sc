@@ -14,8 +14,30 @@ uniform vec4 OverlayColor;
 
 SAMPLER2D_AUTOREG(s_MatTexture);
 
+#define SHEET_HAND_AKTIF 1   // 0 = matikan perbaikan sheet di item tangan/ikon
+#define SHEET_PENANDA 249
+#define SHEET_PX 32.0
+
+vec4 sampelSheet(vec2 uv) {
+    vec4 raw = texture2D(s_MatTexture, uv);
+#if SHEET_HAND_AKTIF
+    if (int(raw.w * 255.0 + 0.5) != SHEET_PENANDA) {
+        return raw;
+    }
+    vec2 at = vec2(textureSize(s_MatTexture, 0));
+    vec2 g = uv * at / SHEET_PX;
+    vec2 cell = floor(g);
+    vec2 loc = g - cell;
+    vec4 a = texture2DLod(s_MatTexture, (cell + loc * 0.5) * SHEET_PX / at, 0.0);
+    a.a = 1.0;
+    return a;
+#else
+    return raw;
+#endif
+}
+
 void main() {
-    vec4 diffuse = texture2D(s_MatTexture, v_texCoords);
+    vec4 diffuse = sampelSheet(v_texCoords);
 
 #ifdef ALPHA_TEST_DISCARD_VALUE_BASED
     if (diffuse.a < DiscardValue.x) {
