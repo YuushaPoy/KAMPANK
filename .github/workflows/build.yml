@@ -33,6 +33,7 @@ jobs:
           call build.bat SunMoon multiplatform
           call build.bat ItemInHandTextured multiplatform
           call build.bat SingleBlock multiplatform
+          call build.bat MeshFallback multiplatform
 
       - name: Upload Compiled Shaders
         uses: actions/upload-artifact@v4
