@@ -1,4 +1,4 @@
-$input v_clipPosition, v_color0, v_fog, v_light, v_texcoord0, v_worldPos
+$input v_clipPosition, v_color0, v_fog, v_light, v_texcoord0, v_worldPos, v_corner
 
 #include <bgfx_shader.sh>
 #include <MinecraftRenderer.Materials/DynamicUtil.dragonh>
@@ -49,19 +49,38 @@ vec3 glowBloom(vec3 g) {
     return mix(g, vec3_splat(l * 1.15), w);
 }
 
-vec4 sampelSheet(vec2 uv, out float metalAmt, out vec4 glowTex) {
+
+//koordinat lokal sisi blok (0..1) dari t (interpolasi sudut kubus), dipetakan ke u/v lewat turunan uv
+vec2 sheetLocalT(vec3 t, vec2 uv) {
+    vec3 dt = abs(dFdx(t)) + abs(dFdy(t));
+    float mn = min(dt.x, min(dt.y, dt.z));
+    vec3 an = vec3(step(dt.x, mn + 0.0001), step(dt.y, mn + 0.0001), step(dt.z, mn + 0.0001));
+    vec2 w = (an.y > 0.5) ? t.xz : ((an.x > 0.5) ? vec2(t.z, t.y) : vec2(t.x, t.y));
+    vec2 dwx = dFdx(w);
+    vec2 dwy = dFdy(w);
+    float cuA = dFdx(uv.x) * dwx.x + dFdy(uv.x) * dwy.x;
+    float cuB = dFdx(uv.x) * dwx.y + dFdy(uv.x) * dwy.y;
+    float cvA = dFdx(uv.y) * dwx.x + dFdy(uv.y) * dwy.x;
+    float cvB = dFdx(uv.y) * dwx.y + dFdy(uv.y) * dwy.y;
+    bool lurus = (abs(cuA) + abs(cvB)) >= (abs(cuB) + abs(cvA));
+    float su = lurus ? cuA : cuB;
+    float sv = lurus ? cvB : cvA;
+    float wu = lurus ? w.x : w.y;
+    float wv = lurus ? w.y : w.x;
+    return clamp(vec2(su >= 0.0 ? wu : 1.0 - wu, sv >= 0.0 ? wv : 1.0 - wv), 0.002, 0.998);
+}
+
+vec4 sampelSheet(vec2 uv, vec3 corner, out float metalAmt, out vec4 glowTex) {
     metalAmt = 0.0;
     vec4 raw = texture2D(s_MatTexture, uv);
     glowTex = raw;
     int ca = int(raw.w * 255.0 + 0.5);
 #if SHEET_HAND_AKTIF
+    vec2 loc = sheetLocalT(corner, uv);
     if (ca == SHEET_PENANDA) {
         vec2 at = vec2(textureSize(s_MatTexture, 0));
-        vec2 g = uv * at / SHEET_PX;
-        vec2 cell = floor(g);
-        vec2 loc = g - cell;
-        vec2 o = cell * SHEET_PX / at;
         vec2 e = vec2(SHEET_PX, SHEET_PX) / at;
+        vec2 o = uv - loc * e;
         vec4 a = texture2DLod(s_MatTexture, o + loc * 0.5 * e, 0.0);
         vec4 d = texture2DLod(s_MatTexture, o + (vec2(0.0, 0.5) + loc * 0.5) * e, 0.0);
         vec3 em = texture2DLod(s_MatTexture, o + (vec2(0.5, 0.5) + loc * 0.5) * e, 0.0).rgb;
@@ -85,7 +104,7 @@ void main() {
 #else
     float metalAmt;
     vec4 glowTex;
-    vec4 albedo = sampelSheet(v_texcoord0, metalAmt, glowTex);
+    vec4 albedo = sampelSheet(v_texcoord0, v_corner, metalAmt, glowTex);
 
     if (AlphaMaskedTint.x != 0.0) {
         albedo.rgb = mix(albedo.rgb, albedo.rgb * v_color0.rgb, albedo.a) * v_color0.a;
