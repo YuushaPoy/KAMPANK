@@ -1,5 +1,5 @@
 $input a_color0, a_normal, a_position, a_texcoord0
-$output v_clipPosition, v_color, v_fog, v_light, v_texCoords, v_worldPos
+$output v_clipPosition, v_color, v_fog, v_light, v_texCoords, v_worldPos, v_corner
 
 #include <bgfx_shader.sh>
 #include <MinecraftRenderer.Materials/FogUtil.dragonh>
@@ -14,6 +14,7 @@ uniform vec4 OverlayColor;
 uniform vec4 UVAnimation;
 
 void main() {
+    v_corner = step(vec3_splat(0.25), a_position);
     vec4 worldPos = mul(u_model[0], vec4(a_position, 1.0));
     mat4 proj = u_proj;
     proj[2].x += SubPixelOffset.x;
