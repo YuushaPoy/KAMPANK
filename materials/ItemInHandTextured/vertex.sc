@@ -3,7 +3,7 @@ $input a_position, a_normal, a_texcoord0, a_color0
     $input i_data1, i_data2, i_data3
 #endif
 
-$output v_clipPosition, v_color0, v_fog, v_light, v_texcoord0, v_worldPos
+$output v_clipPosition, v_color0, v_fog, v_light, v_texcoord0, v_worldPos, v_corner
 
 #include <bgfx_shader.sh>
 #include <MinecraftRenderer.Materials/DynamicUtil.dragonh>
@@ -16,6 +16,7 @@ uniform vec4 FogColor;
 uniform vec4 TileLightColor;
 
 void main() {
+    v_corner = step(vec3_splat(0.25), a_position);
     mat4 World = u_model[0];
 
     float lightIntensity = calculateLightIntensity(World, vec4(a_normal.xyz, 0.0), TileLightColor);
