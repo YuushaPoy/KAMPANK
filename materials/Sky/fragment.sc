@@ -24,6 +24,8 @@ float bayer8(vec2 a) {
 #define UDW_SCATTER 6.0
 #define UDW_TERANG 2.0
 
+#define UDW_DEBUG 1   // 1 = layar dibagi 3 pita berisi nilai fog (untuk dibaca dari screenshot). set 0 setelah selesai
+
 #define AWAN_BAYER 1
 #define AWAN_DITHER 0.02
 
@@ -97,5 +99,17 @@ void main() {
     }
 #endif
 
+#if UDW_DEBUG && !defined(INSTANCING)
+    {
+        float dbgBand = floor(mod(gl_FragCoord.x / 120.0, 3.0));
+        if (dbgBand < 0.5) {
+            diffuse.rgb = fclr.rgb;                                                              // pita 1: FogColor
+        } else if (dbgBand < 1.5) {
+            diffuse.rgb = vec3(FogAndDistanceControl.x, FogAndDistanceControl.y, saturate(FogAndDistanceControl.z / 256.0)); // pita 2: fog x, y, z/256
+        } else {
+            diffuse.rgb = v_color0.rgb;                                                          // pita 3: warna sky (SkyColor di puncak langit)
+        }
+    }
+#endif
     gl_FragColor = diffuse;
 }
