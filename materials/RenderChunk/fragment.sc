@@ -8,6 +8,9 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
+#define METAL_GAIN 2.5  // pengali kekuatan metal blok sheet (1.0 = asli). naikkan kalau terlalu lemah
+#define METAL_SHADOW_KUAT 1.0  // 1.0 = metal mati total di bayangan (asli), 0.0 = bayangan tidak mematikan metal
+#define METAL_DEBUG 0  // 0=off, 1=blok terdeteksi metal jadi magenta, 2=metalAktif (putih=aktif, hitam=dimatikan), 3=alpha terbaca: hijau=255, magenta=250, merah=lainnya
 #define SHEET_AKTIF 1   // 0 = matikan seluruh blok sheet (tes bisect)
 #define SHEET_PENANDA 249
 #define SHEET_PX 32.0
@@ -702,12 +705,12 @@ void main() {
 #endif
 
     //metalic
-    float metalAmt = sheetOn ? saturate(sheetData.g) : 1.0;
+    float metalAmt = sheetOn ? saturate(sheetData.g * METAL_GAIN) : 1.0;
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > METAL_MIN);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
-    float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
+    float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - METAL_SHADOW_KUAT * shadow / 0.65);
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
 
@@ -763,6 +766,21 @@ void main() {
 
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
+
+#if METAL_DEBUG == 1
+    if (metalic) {
+        _finalColor.rgb = vec3(1.0, 0.0, 1.0);
+    }
+#elif METAL_DEBUG == 2
+    if (metalic) {
+        _finalColor.rgb = vec3_splat(metalAktif);
+    }
+#elif METAL_DEBUG == 3
+    {
+        float dbgA = oreTex.w * 255.0;
+        _finalColor.rgb = (dbgA > 254.5) ? vec3(0.0, 1.0, 0.0) : ((abs(dbgA - 250.0) < 0.5) ? vec3(1.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0));
+    }
+#endif
 
     //hujan
     if (!(udw && nether && akhir)) {
@@ -898,12 +916,12 @@ void main() {
 #endif
 
     //metalic
-    float metalAmt = sheetOn ? saturate(sheetData.g) : 1.0;
+    float metalAmt = sheetOn ? saturate(sheetData.g * METAL_GAIN) : 1.0;
     bool metalic = (int(oreTex.w * 255.0 + 0.5) == 250) || (sheetOn && sheetData.g > METAL_MIN);
     if (v_ditheringAndMaskTinting.y > 0.5) {
         metalic = false;
     }
-    float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - shadow / 0.65);
+    float metalAktif = smoothstep(0.05, 0.3, wk) * (1.0 - hujand) * (1.0 - isudw) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - METAL_SHADOW_KUAT * shadow / 0.65);
     if (metalic && metalAktif > 0.001) {
         vec3 sebelumMetal = _finalColor.rgb;
 
