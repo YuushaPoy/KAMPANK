@@ -112,6 +112,11 @@ SAMPLER2D_AUTOREG(s_SeasonsTexture);
 #define SUN_LIHAT 4.0
 #define SUN_FOGA 1.0
 #define SUN_DEBUG 0.0
+#define DUSK_WARM_A 0.08   // fog harus lebih merah dari biru (r - b) minimal ini, baru dianggap fajar/senja
+#define DUSK_WARM_B 0.25   // di atas ini fajar/senja dianggap penuh
+#define DUSK_WK_A 0.10     // batas bawah terang langit (wk) agar dusk aktif
+#define DUSK_WK_B 0.30
+#define DUSK_WK_ATAS 0.95  // di atas ini (siang penuh) dusk mati
 
 //gradasi biru air saat malam
 #define AIR_GRAD_MULAI 20.0
@@ -662,7 +667,9 @@ void main() {
     sunrise *= uv1.y;
     float sunset = duskK * fogA * sideS;
     sunset *= uv1.y;
-    float twiGate = (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw) * smoothstep(0.15, 0.4, max(fclr.r, max(fclr.g, fclr.b)));
+    float duskWarm = smoothstep(DUSK_WARM_A, DUSK_WARM_B, FogColor.r - FogColor.b);
+    float duskWk = smoothstep(DUSK_WK_A, DUSK_WK_B, wk) * (1.0 - smoothstep(DUSK_WK_ATAS, 1.0, wk));
+    float twiGate = (1.0 - hujand) * (1.0 - isnether) * (1.0 - isakhir) * (1.0 - isudw) * smoothstep(0.15, 0.4, max(fclr.r, max(fclr.g, fclr.b))) * duskWarm * duskWk;
     sunrise *= twiGate;
     sunset *= twiGate;
     float duskAmt = saturate(sunrise + sunset);
@@ -1347,7 +1354,7 @@ void main() {
 
     //debug fog
     if (SUN_DEBUG > 1.5) {
-        _finalColor.rgb = (SUN_DEBUG > 2.5) ? vec3_splat(FogColor.a) : FogColor.rgb;
+        _finalColor.rgb = (SUN_DEBUG > 3.5) ? vec3(duskW, duskWarm, duskWk) : ((SUN_DEBUG > 2.5) ? vec3_splat(FogColor.a) : FogColor.rgb);
     }
 
 #if defined(OPAQUE)
