@@ -8,15 +8,15 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
-#define METAL_GAIN 2.5  // pengali kekuatan metal blok sheet (1.0 = asli). naikkan kalau terlalu lemah
-#define METAL_SHADOW_KUAT 1.0  // 1.0 = metal mati total di bayangan (asli), 0.0 = bayangan tidak mematikan metal
-#define METAL_DEBUG 0  // 0=off, 1=blok terdeteksi metal jadi magenta, 2=metalAktif (putih=aktif, hitam=dimatikan), 3=alpha terbaca: hijau=255, magenta=250, merah=lainnya
-#define SHEET_AKTIF 1   // 0 = matikan seluruh blok sheet (tes bisect)
+#define METAL_GAIN 2.5
+#define METAL_SHADOW_KUAT 1.0 
+#define METAL_DEBUG 0  
+#define SHEET_AKTIF 1   
 #define SHEET_PENANDA 249
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
 //normalmap metalic
-#define NORMALMAP_KUAT 0.25
+#define NORMALMAP_KUAT 0.3
 //specular matahari persegi (pantulan matahari ala Minecraft di metal, kaca, es, air)
 #define SPEC_SUN_AKTIF 1            // 0 = matikan
 #define SPEC_SUN_KUAT 0.85           // terang/opasitas pantulan matahari (makin kecil makin transparan)
@@ -28,12 +28,12 @@ uniform vec4 FogAndDistanceControl;
 #define SPEC_AIR_RIPPLE 0.15        // seberapa bergelombang pantulan di air
 #define NORMALMAP_FLIP vec2(1.0, 1.0)
 #define NORMALMAP_SLICE vec2(0.5, 0.0)
-#define NORMALMAP_TBN 0
+#define NORMALMAP_TBN 1
 #define NORMALMAP_SKY_KUAT 0.25
 #define METAL_MIN 0.02
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
-#define SNELL_DISTORSI 0.02
+#define SNELL_DISTORSI 0.05
 #define SNELL_INDEKS 1.333
 #define SNELL_LANGIT 1.0
 #define SNELL_PUTIH 0.3
