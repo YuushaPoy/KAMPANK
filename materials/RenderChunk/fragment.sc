@@ -16,7 +16,7 @@ uniform vec4 FogAndDistanceControl;
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
 //normalmap metalic
-#define NORMALMAP_KUAT 0.3
+#define NORMALMAP_KUAT 0.2
 //specular matahari persegi (pantulan matahari ala Minecraft di metal, kaca, es, air)
 #define SPEC_SUN_AKTIF 1            // 0 = matikan
 #define SPEC_SUN_KUAT 0.85           // terang/opasitas pantulan matahari (makin kecil makin transparan)
@@ -29,7 +29,7 @@ uniform vec4 FogAndDistanceControl;
 #define NORMALMAP_FLIP vec2(1.0, 1.0)
 #define NORMALMAP_SLICE vec2(0.5, 0.0)
 #define NORMALMAP_TBN 1
-#define NORMALMAP_SKY_KUAT 0.25
+#define NORMALMAP_SKY_KUAT 0.2
 #define METAL_MIN 0.02
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
