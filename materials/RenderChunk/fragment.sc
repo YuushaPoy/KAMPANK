@@ -8,10 +8,10 @@ uniform vec4 FogAndDistanceControl;
 
 //fog bawah air
 #define UDW_FOG_MAX   1.0
-#define METAL_GAIN 2.5
-#define METAL_SHADOW_KUAT 1.0 
-#define METAL_DEBUG 0  
-#define SHEET_AKTIF 1   
+#define METAL_GAIN 2.5  // pengali kekuatan metal blok sheet (1.0 = asli). naikkan kalau terlalu lemah
+#define METAL_SHADOW_KUAT 1.0  // 1.0 = metal mati total di bayangan (asli), 0.0 = bayangan tidak mematikan metal
+#define METAL_DEBUG 0  // 0=off, 1=blok terdeteksi metal jadi magenta, 2=metalAktif (putih=aktif, hitam=dimatikan), 3=alpha terbaca: hijau=255, magenta=250, merah=lainnya
+#define SHEET_AKTIF 1   // 0 = matikan seluruh blok sheet (tes bisect)
 #define SHEET_PENANDA 249
 #define SHEET_PX 32.0
 #define SHEET_ATLAS vec2(0.0, 0.0)
@@ -19,8 +19,10 @@ uniform vec4 FogAndDistanceControl;
 #define NORMALMAP_KUAT 0.2
 //specular matahari persegi (pantulan matahari ala Minecraft di metal, kaca, es, air)
 #define SPEC_SUN_AKTIF 1            // 0 = matikan
-#define SPEC_SUN_KUAT 0.85           // terang/opasitas pantulan matahari (makin kecil makin transparan)
-#define SPEC_SUN_UKURAN 0.18        // setengah lebar persegi (tangen sudut). matahari MC asli sekitar 0.15
+#define SPEC_SUN_KUAT 0.73           // terang/opasitas pantulan matahari (makin kecil makin transparan)
+#define SPEC_SUN_TEX 1              // 1 = bentuk dari texture sun.png (tertanam di kode), 0 = persegi polos
+#define SPEC_SUN_UKURAN 0.4         // setengah lebar SELURUH texture matahari (inti = 1/4-nya). 0.3 = ukuran matahari vanilla
+#define SPEC_SUN_GLOW 1.0           // terang glow redup di sekeliling inti (0 = tanpa glow)
 #define SPEC_SUN_LEMBUT 0.6         // kelembutan tepi (0 = tajam)
 #define SPEC_SUN_TINGGI 0.85        // ketinggian matahari siang (komponen y, 0..1)
 #define SPEC_SUN_RENDAH 0.12        // ketinggian matahari saat fajar/senja
@@ -33,7 +35,7 @@ uniform vec4 FogAndDistanceControl;
 #define METAL_MIN 0.02
 #define SNELL_SUDUT 0.661
 #define SNELL_LEMBUT 0.03
-#define SNELL_DISTORSI 0.05
+#define SNELL_DISTORSI 0.02
 #define SNELL_INDEKS 1.333
 #define SNELL_LANGIT 1.0
 #define SNELL_PUTIH 0.3
@@ -415,10 +417,49 @@ float sunSpecMask(vec3 R, vec3 S, vec3 ax) {
     vec3 v = normalize(cross(S, ax));
     float a = dot(R, ax) / d;
     float b = dot(R, v) / d;
-    float e = SPEC_SUN_UKURAN;
+    float e = SPEC_SUN_UKURAN * 0.45;
     float w = e * SPEC_SUN_LEMBUT + 0.001;
     return (1.0 - smoothstep(e - w, e + w, abs(a))) * (1.0 - smoothstep(e - w, e + w, abs(b)));
 }
+
+float sunGlowProf(int i) {
+    vec4 q = (i < 4) ? vec4(0.0079, 0.0180, 0.0364, 0.0598) : ((i < 8) ? vec4(0.0880, 0.1246, 0.1610, 0.1993) : ((i < 12) ? vec4(0.2362, 0.2745, 0.3127, 0.3482) : vec4(0.3905, 0.4280, 0.4424, 0.4520)));
+    int k = i - (i / 4) * 4;
+    return (k == 0) ? q.x : ((k == 1) ? q.y : ((k == 2) ? q.z : q.w));
+}
+
+vec3 sunSpecTex(vec3 R, vec3 S, vec3 ax) {
+    float d = dot(R, S);
+    if (d <= 0.02) {
+        return vec3_splat(0.0);
+    }
+    vec3 v = normalize(cross(S, ax));
+    vec2 ab = vec2(dot(R, ax), dot(R, v)) / d;
+    vec2 uv = ab / SPEC_SUN_UKURAN * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x >= 1.0 || uv.y < 0.0 || uv.y >= 1.0) {
+        return vec3_splat(0.0);
+    }
+    ivec2 ip = ivec2(floor(uv * 32.0));
+    vec2 c = abs(vec2(ip) + 0.5 - 16.0);
+    float m = max(c.x, c.y);
+    if (m < 1.6) {
+        return vec3(1.0, 1.0, 0.851);
+    }
+    if (m < 2.6) {
+        return vec3(1.0, 1.0, 0.667);
+    }
+    if (m < 3.6) {
+        return vec3(1.0, 0.835, 0.290);
+    }
+    float g = sunGlowProf(min(ip.x, 31 - ip.x)) * sunGlowProf(min(ip.y, 31 - ip.y)) * SPEC_SUN_GLOW;
+    return vec3(g, g, g * 0.25);
+}
+
+#if SPEC_SUN_TEX
+#define SPEC_FN(R, S, A) sunSpecTex(R, S, A)
+#else
+#define SPEC_FN(R, S, A) vec3_splat(sunSpecMask(R, S, A))
+#endif
 
 vec3 normalmapDecode(vec4 tex) {
     if (tex.r <= 0.0 && tex.g <= 0.0 && tex.b <= 0.0) {
@@ -686,7 +727,11 @@ void main() {
         specS = normalize(SPEC_SUN_MANUAL);
     }
     vec3 specAx = normalize(vec3(0.7071, 0.0, 0.7071));
+#if SPEC_SUN_TEX
+    vec3 specCol = mix(vec3_splat(1.0), vec3(1.0, 0.65, 0.35), duskW) * SPEC_SUN_KUAT;
+#else
     vec3 specCol = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.6, 0.25), duskW) * SPEC_SUN_KUAT;
+#endif
     float specGate = smoothstep(0.15, 0.6, wk);
 #endif
     float soreHujan = (1.0 - smoothstep(0.0, 0.35, hujand)) * smoothstep(0.05, 0.2, max(fclr.r, max(fclr.g, fclr.b)) - min(fclr.r, min(fclr.g, fclr.b)));
@@ -805,7 +850,7 @@ void main() {
         }
 
 #if SPEC_SUN_AKTIF
-        _finalColor.rgb += specCol * sunSpecMask(Rm, specS, specAx) * fr * specGate;
+        _finalColor.rgb += specCol * SPEC_FN(Rm, specS, specAx) * fr * specGate;
 #endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
@@ -1018,7 +1063,7 @@ void main() {
         }
 
 #if SPEC_SUN_AKTIF
-        _finalColor.rgb += specCol * sunSpecMask(Rm, specS, specAx) * fr * specGate;
+        _finalColor.rgb += specCol * SPEC_FN(Rm, specS, specAx) * fr * specGate;
 #endif
         _finalColor.rgb = mix(sebelumMetal, _finalColor.rgb, metalAktif);
     }
@@ -1136,7 +1181,7 @@ void main() {
             }
         }
 #if SPEC_SUN_AKTIF
-        _finalColor.rgb += specCol * sunSpecMask(reflect(-V, N), specS, specAx) * fr * specGate;
+        _finalColor.rgb += specCol * SPEC_FN(reflect(-V, N), specS, specAx) * fr * specGate;
 #endif
         _finalColor.rgb = mix(sebelumRef, _finalColor.rgb, refAktif);
     }
@@ -1214,11 +1259,12 @@ void main() {
             float wRx = ombakAir(p.xz + vec2(0.06, 0.0), tm) * 0.85 - wave;
             float wRz = ombakAir(p.xz + vec2(0.0, 0.06), tm) * 0.85 - wave;
             vec3 Nw = normalize(vec3(-wRx, 0.06 / max(SPEC_AIR_RIPPLE, 0.001), -wRz));
-            float spW = sunSpecMask(reflect(-V, Nw), specS, specAx);
+            vec3 spC = SPEC_FN(reflect(-V, Nw), specS, specAx);
+            float spW = max(spC.r, max(spC.g, spC.b));
             float spF = fresnel(vec3_splat(0.2), NdotV).x;
-            spW *= spF * specGate * (1.0 - hujand) * (1.0 - shadowAir / 0.65);
-            _finalColor.rgb += specCol * spW;
-            _finalColor.a = max(_finalColor.a, spW * SPEC_SUN_KUAT * 0.6);
+            float spK = spF * specGate * (1.0 - hujand) * (1.0 - shadowAir / 0.65);
+            _finalColor.rgb += specCol * spC * spK;
+            _finalColor.a = max(_finalColor.a, spW * spK * SPEC_SUN_KUAT * 0.6);
         }
 #endif
 
